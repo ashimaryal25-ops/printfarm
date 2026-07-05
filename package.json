@@ -1,0 +1,14 @@
+{
+  "name": "printerfarm",
+  "repository": "https://github.com/ashimaryal25-ops/printerfarm",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "No-root orchestration layer for stock Creality printer farms — discover, monitor, and route jobs without USB, firmware modification, OctoPrint, or Moonraker.",
+  "scripts": {
+    "start": "node server.mjs",
+    "status": "node bin/farm-status.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
