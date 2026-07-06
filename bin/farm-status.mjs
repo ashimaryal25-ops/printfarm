@@ -5,7 +5,7 @@
 //   node bin/farm-status.mjs 192.168.137.10 192.168.137.78
 
 import { readFileSync, existsSync } from "node:fs";
-import { probe, judge } from "../lib/probe.mjs";
+import { startFarmPolling, farmState } from "../lib/farm.mjs";
 
 const PRINTERS_JSON = "printers.json";
 const ipArgs = process.argv.slice(2);
@@ -20,20 +20,19 @@ if (printers.length === 0) {
   process.exit(1);
 }
 
-console.log("");
-console.log("id    ip                status      job");
-console.log("----  ----------------  ----------  -------------------------");
+// Start the background engine (it will run forever)
+startFarmPolling(printers);
 
-async function run() {
-  // Dispatch concurrent network probes
-  const networkPromises = printers.map(p => probe(p));
-  
-  // Await resolution or timeouts
-  const rawResults = await Promise.all(networkPromises);
+// Render the UI every 5 seconds using the global memory state
+setInterval(() => {
+  console.clear();
+  console.log("PrinterFarm Live Status (Updates every 5s)");
+  console.log("--------------------------------------------");
+  console.log("id    ip                status      job");
+  console.log("----  ----------------  ----------  -------------------------");
 
-  // Evaluate state and render output
-  for (const raw of rawResults) {
-    const final = judge(raw);
+  // Read directly from the Map
+  for (const [id, final] of farmState.entries()) {
     console.log(
       `${final.id.padEnd(4)}  ` +
       `${final.ip.padEnd(16)}  ` +
@@ -41,6 +40,4 @@ async function run() {
       `${final.displayJob}`
     );
   }
-}
-
-run();
+}, 5000);
