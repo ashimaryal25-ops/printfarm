@@ -25,13 +25,13 @@ console.log("id    ip                status      job");
 console.log("----  ----------------  ----------  -------------------------");
 
 async function run() {
-  // Fire off all network requests at the exact same time
+  // Dispatch concurrent network probes
   const networkPromises = printers.map(p => probe(p));
   
-  // Wait for all of them to finish (or timeout after 4 seconds)
+  // Await resolution or timeouts
   const rawResults = await Promise.all(networkPromises);
 
-  // Judge the results and print the table
+  // Evaluate state and render output
   for (const raw of rawResults) {
     const final = judge(raw);
     console.log(
