@@ -3,13 +3,37 @@ import { createHash } from 'node:crypto';
 
 const PORT = 9999;
 
-// We use the raw Node.js HTTP server to handle the WebSocket upgrade manually,
-// ensuring this project remains 100% dependency-free for the portfolio.
+// The global mutable state of our mock printer
+let fakeState = {
+  deviceState: "free",
+  printFileName: "",
+  printProgress: 0,
+  targetNozzleTemp: 0,
+  targetBedTemp: 0
+};
+
+let progressTimer = null;
+
+// We use the raw Node.js HTTP server to handle both file uploads and WebSockets
 const server = createServer((req, res) => {
+  
+  // 1. Handle HTTP POST uploads (multipart/form-data simulation)
+  if (req.method === 'POST' && req.url.startsWith('/upload/')) {
+    // We just consume the stream so the client doesn't hang, then reply 200 OK.
+    req.on('data', () => {});
+    req.on('end', () => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ code: 0, msg: "success" }));
+      console.log(`[Mock Printer] Received HTTP file upload: ${req.url}`);
+    });
+    return;
+  }
+
   res.writeHead(400, { 'Content-Type': 'text/plain' });
-  res.end('WebSocket connections only');
+  res.end('WebSocket or Upload connections only');
 });
 
+// 2. Handle WebSocket upgrades
 server.on('upgrade', (req, socket) => {
   const key = req.headers['sec-websocket-key'];
   if (!key) return socket.end();
@@ -26,41 +50,74 @@ server.on('upgrade', (req, socket) => {
     `Sec-WebSocket-Accept: ${hash}\r\n\r\n`
   );
 
-  // When the client sends the "get" command, reply with fake telemetry
-  socket.on('data', () => {
+  socket.on('data', (buffer) => {
+    if (buffer.length < 6) return;
     
-    // Simulate a printer that is currently busy printing
-    const fakeState = {
-      deviceState: "print",
-      printFileName: "mock_simulation.gcode",
-      printProgress: 42,
-      targetNozzleTemp: 210,
-      targetBedTemp: 60
-    };
+    // Client frames MUST be masked. We have to manually unmask the binary payload.
+    const isMasked = (buffer[1] & 0x80) === 0x80;
+    if (!isMasked) return; 
 
-    const payload = JSON.stringify(fakeState);
-    const length = Buffer.byteLength(payload);
+    let payloadLength = buffer[1] & 0x7F;
+    let offset = 2;
+    if (payloadLength === 126) offset += 2;
+    else if (payloadLength === 127) offset += 8;
+
+    const maskKey = buffer.slice(offset, offset + 4);
+    offset += 4;
     
-    // Construct an unmasked WebSocket text frame
-    let frame;
-    if (length < 126) {
-      frame = Buffer.alloc(2 + length);
-      frame[0] = 0x81; // FIN = 1, Opcode = 1 (Text)
-      frame[1] = length;
-      frame.write(payload, 2);
-    } else {
-      frame = Buffer.alloc(4 + length);
-      frame[0] = 0x81;
-      frame[1] = 126;
-      frame.writeUInt16BE(length, 2);
-      frame.write(payload, 4);
+    const unmasked = Buffer.alloc(buffer.length - offset);
+    for (let i = 0; i < unmasked.length; i++) {
+      unmasked[i] = buffer[offset + i] ^ maskKey[i % 4];
+    }
+    
+    const msg = unmasked.toString('utf8');
+
+    // Scenario A: Client sends the "Start Print" command
+    if (msg.includes('"method":"set"')) {
+      console.log(`[Mock Printer] Received start command... warming up heaters!`);
+      fakeState.deviceState = "print";
+      fakeState.targetNozzleTemp = 210;
+      fakeState.targetBedTemp = 60;
+      fakeState.printProgress = 0;
+      
+      // Extract the requested filename from the raw JSON string
+      const match = msg.match(/printprt:.*\/([^/]+\.gcode)/);
+      if (match) fakeState.printFileName = match[1];
+      
+      // Start a background timer to simulate the print progress creeping up over time
+      if (!progressTimer) {
+        progressTimer = setInterval(() => {
+          if (fakeState.printProgress < 100) fakeState.printProgress += 1;
+        }, 1000);
+      }
+      return;
     }
 
-    socket.write(frame);
+    // Scenario B: Client asks for live telemetry
+    if (msg.includes('"method":"get"')) {
+      const payload = JSON.stringify(fakeState);
+      const length = Buffer.byteLength(payload);
+      
+      // Construct an unmasked WebSocket text frame (servers don't mask)
+      let frame;
+      if (length < 126) {
+        frame = Buffer.alloc(2 + length);
+        frame[0] = 0x81; // FIN = 1, Opcode = 1 (Text)
+        frame[1] = length;
+        frame.write(payload, 2);
+      } else {
+        frame = Buffer.alloc(4 + length);
+        frame[0] = 0x81;
+        frame[1] = 126;
+        frame.writeUInt16BE(length, 2);
+        frame.write(payload, 4);
+      }
+      socket.write(frame);
+    }
   });
 });
 
 server.listen(PORT, () => {
-  console.log(`[Mock Printer] Simulating Creality hardware on ws://127.0.0.1:${PORT}`);
-  console.log(`Test it with: node bin/farm-status.mjs 127.0.0.1`);
+  console.log(`[Mock Printer] The Ultimate Simulator is running on 127.0.0.1:${PORT}`);
+  console.log(`Ready for HTTP file uploads and WebSocket telemetry.`);
 });
