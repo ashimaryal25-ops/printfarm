@@ -15,7 +15,7 @@ This project reverse-engineers the native Creality web UI protocol to provide a 
 The engine communicates with the physical hardware via raw WebSockets on port `9999`. By sending a standard `{"method": "get"}` JSON payload, the printer returns fragmented JSON telemetry containing live data (device state, temperatures, current file, and progress).
 
 ### 2. The Polling Engine
-To prevent network I/O blocking, the engine dispatches WebSocket requests to all printers concurrently using `Promise.all()`. 
+To prevent network I/O blocking while respecting the weak network stacks of embedded hardware, the engine strictly serializes WebSocket probes. (Creality `9999` sockets do not reliably handle concurrent network connections). 
 
 The results are parsed and stored in a global memory `Map` (rather than an array) by a non-blocking `setInterval` daemon. This ensures `O(1)` lookups and a completely flat memory footprint over long periods of uptime.
 
@@ -50,3 +50,7 @@ The `judge()` firewall logic is fully isolated and mathematically verified for 1
 ```bash
 node --test
 ```
+
+## Security Note
+This software is highly experimental and can physically actuate hardware and start thermal events. 
+By default, the dashboard securely binds to `localhost` (`127.0.0.1:3000`). If you wish to access the dashboard from other devices on your network, you can override the host by running `HOST=0.0.0.0 npm start`. **Only do this on a trusted local area network (LAN).** Never expose port 3000 directly to the internet.

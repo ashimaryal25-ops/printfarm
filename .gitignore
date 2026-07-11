@@ -10,3 +10,7 @@ Thumbs.db
 
 # logs
 *.log
+
+# app data
+scratch/
+*.gcode.tmp

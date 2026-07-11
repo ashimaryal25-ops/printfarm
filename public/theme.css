@@ -1,0 +1,63 @@
+:root {
+  /* Neuomorphic Plastic Palette */
+  --color-background: #e0e5ec;
+  --color-primary: #4a5568; /* Soft dark grey for text */
+  --color-secondary: #718096; /* Lighter grey for subtitles */
+  
+  --color-shadow-light: #ffffff;
+  --color-shadow-dark: #a3b1c6;
+  
+  /* Status Glows (Inner Plastic Glows) */
+  --color-glow-printing: rgba(0, 195, 255, 0.4); /* Blue glow */
+  --color-text-printing: #007bb5;
+  
+  --color-glow-heating: rgba(255, 106, 0, 0.4); /* Orange glow */
+  --color-text-heating: #cc5500;
+  
+  --color-glow-clearing: rgba(255, 204, 0, 0.4); /* Yellow glow */
+  --color-text-clearing: #b28f00;
+
+  --color-glow-free: rgba(74, 85, 104, 0.1);
+  --color-text-free: #4a5568;
+
+  /* Typography */
+  --font-h1: "Outfit", sans-serif;
+  --font-h2: "Outfit", sans-serif;
+  --font-body: "Outfit", sans-serif;
+  --font-data: "JetBrains Mono", monospace;
+  
+  --text-h1: 2rem;
+  --text-h2: 1.25rem;
+  --text-body: 1rem;
+  --text-label: 0.85rem;
+  
+  --font-weight-h1: 700;
+  --font-weight-h2: 600;
+  --font-weight-label: 600;
+  
+  /* Structure (Soft rounded edges for molded plastic) */
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-full: 9999px;
+  
+  /* Neuomorphic Shadows */
+  --shadow-extrude: 9px 9px 16px var(--color-shadow-dark), 
+                    -9px -9px 16px var(--color-shadow-light);
+  --shadow-extrude-hover: 12px 12px 20px var(--color-shadow-dark), 
+                          -12px -12px 20px var(--color-shadow-light);
+  --shadow-extrude-pressed: 2px 2px 5px var(--color-shadow-dark), 
+                            -2px -2px 5px var(--color-shadow-light);
+                            
+  --shadow-crater: inset 6px 6px 10px var(--color-shadow-dark), 
+                   inset -6px -6px 10px var(--color-shadow-light);
+                   
+  --shadow-crater-hover: inset 8px 8px 14px var(--color-shadow-dark), 
+                         inset -8px -8px 14px var(--color-shadow-light);
+  
+  /* Spacing */
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+}

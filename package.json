@@ -5,7 +5,7 @@
   "type": "module",
   "description": "No-root orchestration layer for stock Creality printer farms — discover, monitor, and route jobs without USB, firmware modification, OctoPrint, or Moonraker.",
   "scripts": {
-    "start": "node server.mjs",
+    "start": "node bin/server.mjs",
     "status": "node bin/farm-status.mjs"
   },
   "engines": {

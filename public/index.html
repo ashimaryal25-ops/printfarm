@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PrinterFarm Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="app-header">
+    <h1>PrinterFarm</h1>
+    <p class="subtitle">Live Telemetry & Control Center</p>
+  </header>
+
+  <div class="global-queue-section">
+    <div class="upload-zone global-upload" id="globalUpload">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="upload-icon">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="17 8 12 3 7 8"></polyline>
+        <line x1="12" y1="3" x2="12" y2="15"></line>
+      </svg>
+      <label>Drop .gcode to Add to Queue</label>
+      <input type="file" accept=".gcode" id="globalFileInput">
+    </div>
+    
+    <div class="queue-list-container">
+      <div class="queue-header">
+        <h3>Queue (<span id="queueCount">0</span>)</h3>
+        <div class="auto-assign-toggle">
+          <label class="toggle-switch">
+            <input type="checkbox" id="autoAssignCheck" checked>
+            <span class="slider"></span>
+          </label>
+          <span class="toggle-label">Auto-Print Jobs</span>
+          <span class="tooltip" title="When checked, jobs automatically go to the next free printer. Uncheck to manually assign jobs.">?</span>
+        </div>
+      </div>
+      <ul id="queueList" class="queue-list">
+        <!-- Queue items injected here -->
+      </ul>
+    </div>
+  </div>
+
+  <main class="farm-grid" id="printer-grid">
+    <!-- Printer cards will be injected here by app.js -->
+  </main>
+
+  <!-- Template for a Printer Card -->
+  <template id="printer-card-template">
+    <div class="printer-card">
+      <div class="printer-card-header">
+        <h3 class="printer-name">Printer</h3>
+        <span class="status-badge">FREE</span>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-group">
+          <span class="stat-label">NOZZLE</span>
+          <span class="stat-value nozzle-temp">0 / 0°C</span>
+        </div>
+        <div class="stat-group">
+          <span class="stat-label">BED</span>
+          <span class="stat-value bed-temp">0 / 0°C</span>
+        </div>
+      </div>
+
+      <div class="progress-section" style="display: none;">
+        <div class="progress-container">
+          <div class="progress-fill"></div>
+        </div>
+        <span class="progress-text">0%</span>
+      </div>
+      
+      <div class="manual-assign-section" style="display: none;">
+        <select class="job-select">
+          <option value="">Select a job...</option>
+        </select>
+        <button class="assign-btn">ADD TO PRINTER</button>
+      </div>
+
+      <div class="local-queue-section">
+        <div class="local-queue-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-sm);">
+          <h4 style="margin-bottom: 0;">Printer Queue</h4>
+          <label class="local-upload-btn" title="Upload directly to printer queue" style="cursor: pointer; color: var(--color-primary); padding: 8px; border-radius: var(--radius-sm); box-shadow: var(--shadow-extrude); transition: all 0.2s ease;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <input type="file" accept=".gcode" class="local-file-input" style="display: none;">
+          </label>
+        </div>
+        <ul class="local-queue-list"></ul>
+      </div>
+
+      <button class="clear-bed-btn" style="display: none;">Mark Bed Cleared</button>
+    </div>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
