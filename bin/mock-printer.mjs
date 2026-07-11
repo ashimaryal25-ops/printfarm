@@ -8,6 +8,8 @@ let fakeState = {
   deviceState: "free",
   printFileName: "",
   printProgress: 0,
+  nozzleTemp: 25,
+  bedTemp: 25,
   targetNozzleTemp: 0,
   targetBedTemp: 0
 };
@@ -50,6 +52,10 @@ server.on('upgrade', (req, socket) => {
     `Sec-WebSocket-Accept: ${hash}\r\n\r\n`
   );
 
+  socket.on('error', (err) => {
+    // Ignore client disconnects
+  });
+
   socket.on('data', (buffer) => {
     if (buffer.length < 6) return;
     
@@ -84,12 +90,47 @@ server.on('upgrade', (req, socket) => {
       const match = msg.match(/printprt:.*\/([^/]+\.gcode)/);
       if (match) fakeState.printFileName = match[1];
       
-      // Start a background timer to simulate the print progress creeping up over time
-      if (!progressTimer) {
-        progressTimer = setInterval(() => {
-          if (fakeState.printProgress < 100) fakeState.printProgress += 1;
-        }, 1000);
-      }
+      // Start a background timer to simulate heating and printing
+      if (progressTimer) clearInterval(progressTimer);
+      
+      progressTimer = setInterval(() => {
+        // 1. Simulate Heating (Simple Linear)
+        let heated = true;
+        
+        // Bed Heating
+        if (fakeState.targetBedTemp > 0) {
+          if (fakeState.bedTemp < fakeState.targetBedTemp) {
+            fakeState.bedTemp = Math.min(fakeState.targetBedTemp, fakeState.bedTemp + 5);
+            heated = false;
+          }
+        } else if (fakeState.bedTemp > 25) {
+          fakeState.bedTemp = Math.max(25, fakeState.bedTemp - 5);
+        }
+        
+        // Nozzle Heating
+        if (fakeState.targetNozzleTemp > 0) {
+          if (fakeState.nozzleTemp < fakeState.targetNozzleTemp) {
+            fakeState.nozzleTemp = Math.min(fakeState.targetNozzleTemp, fakeState.nozzleTemp + 15);
+            heated = false;
+          }
+        } else if (fakeState.nozzleTemp > 25) {
+          fakeState.nozzleTemp = Math.max(25, fakeState.nozzleTemp - 15);
+        }
+
+        // 2. Simulate Printing (only after heated)
+        if (heated && fakeState.printProgress < 100) {
+          fakeState.printProgress += 1;
+        }
+        
+        // When finished, reset state
+        if (fakeState.printProgress >= 100) {
+          clearInterval(progressTimer);
+          progressTimer = null;
+          fakeState.deviceState = "free";
+          fakeState.targetNozzleTemp = 0;
+          fakeState.targetBedTemp = 0;
+        }
+      }, 1000);
       return;
     }
 

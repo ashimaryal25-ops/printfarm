@@ -1,9 +1,11 @@
-# PrinterFarm
+# PrinterFarm Orchestration Dashboard
 
-A zero-dependency Node.js polling engine and hardware simulator for monitoring Creality 3D printers on a local network.
+**Free, local, no-root orchestration for the world's most common 3D printers — stock Creality, no cloud, no firmware mods.**
+
+A highly concurrent, zero-dependency Node.js polling engine and hardware simulator for monitoring and orchestrating a farm of Creality 3D printers (Ender 3 V3 KE, K1, K1 Max, K2) on a local network.
 
 ## The Problem
-Creality 3D printers (like the Ender 3 V3 KE) do not provide an open REST API. To monitor a farm of these printers on a shared network without flashing custom firmware (like Klipper), you typically have to manually navigate to each printer's individual IP address.
+Creality 3D printers (like the Ender 3 V3 KE and K-series) do not provide an open REST API. To monitor a farm of these printers on a shared network without flashing custom firmware (like Klipper), you typically have to manually navigate to each printer's individual IP address.
 
 This project reverse-engineers the native Creality web UI protocol to provide a centralized, highly concurrent monitoring engine.
 
