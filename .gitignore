@@ -14,3 +14,4 @@ Thumbs.db
 # app data
 scratch/
 *.gcode.tmp
+printers.json

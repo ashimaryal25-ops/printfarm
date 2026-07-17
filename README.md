@@ -1,56 +1,126 @@
-# PrinterFarm Orchestration Dashboard
+# PrinterFarm
 
-**Free, local, no-root orchestration for the world's most common 3D printers — stock Creality, no cloud, no firmware mods.**
+PrinterFarm is a local, no-root dashboard for discovering, monitoring, and routing G-code jobs across stock networked Creality printers.
 
-A highly concurrent, zero-dependency Node.js polling engine and hardware simulator for monitoring and orchestrating a farm of Creality 3D printers (Ender 3 V3 KE, K1, K1 Max, K2) on a local network.
+It talks directly to the printers over their existing LAN interfaces. No Raspberry Pi per printer, custom firmware, Moonraker, or cloud account is required.
 
-## The Problem
-Creality 3D printers (like the Ender 3 V3 KE and K-series) do not provide an open REST API. To monitor a farm of these printers on a shared network without flashing custom firmware (like Klipper), you typically have to manually navigate to each printer's individual IP address.
+## What it does
 
-This project reverse-engineers the native Creality web UI protocol to provide a centralized, highly concurrent monitoring engine.
+- Discovers compatible printers on a private home, router, or hotspot network.
+- Shows printer state, temperatures, active file, and progress in one dashboard.
+- Safe physical control: Pause, Resume, and Cancel jobs directly from the dashboard.
+- Routes a global G-code queue to available printers with global **Auto-Print**.
+- Supports printer-specific queues with independent **Auto-Print** toggles.
+- Reserves local Auto-Print printers from the global queue.
+- Uploads G-code over HTTP and starts prints through the stock port `9999` WebSocket protocol.
+- Confirms a start only when the printer reports the exact filename in the printing state.
+- Keeps complete, stopped, failed, and aborted jobs out of the free pool until the bed is marked clear.
+- Retains internal session records for dispatch recovery and debugging.
 
-## Architecture
+## Quickstart
 
-### 1. Protocol Reverse-Engineering
-The engine communicates with the physical hardware via raw WebSockets on port `9999`. By sending a standard `{"method": "get"}` JSON payload, the printer returns fragmented JSON telemetry containing live data (device state, temperatures, current file, and progress).
-
-### 2. The Polling Engine
-To prevent network I/O blocking while respecting the weak network stacks of embedded hardware, the engine strictly serializes WebSocket probes. (Creality `9999` sockets do not reliably handle concurrent network connections). 
-
-The results are parsed and stored in a global memory `Map` (rather than an array) by a non-blocking `setInterval` daemon. This ensures `O(1)` lookups and a completely flat memory footprint over long periods of uptime.
-
-### 3. Firmware Bug Mitigation
-Physical hardware telemetry is often inaccurate. Creality firmware occasionally exhibits a bug where a manually canceled print continues to broadcast its `deviceState` as `"print"` indefinitely. 
-
-The engine routes all incoming telemetry through a strict `judge()` firewall function. If the JSON claims the printer is busy, but both the nozzle and bed temperatures read `0`, the firewall overrides the firmware state and marks the printer as `"free"`.
-
-## Local Simulation & Testing
-
-To allow development without physical hardware, this repository includes a pure Node.js hardware simulator.
-
-### Running the Simulator
-The mock server uses the native `node:http` and `node:crypto` modules to manually perform an RFC-6455 WebSocket handshake, intercepting connections and returning perfect fake JSON telemetry.
+Requirements: Node.js 22 or newer and compatible printers on the same private network as this computer.
 
 ```bash
-# Start the mock Creality printer (Listens on ws://127.0.0.1:9999)
+git clone https://github.com/ashimaryal25-ops/printerfarm.git
+cd printerfarm
+npm start
+```
+
+Open `http://127.0.0.1:3000`, then click **DISCOVER**.
+
+PrinterFarm has no runtime package dependencies, so `npm install` is not required.
+
+## Auto-Print behavior
+
+Global and printer-local Auto-Print are intentionally separate:
+
+1. A printer with local Auto-Print enabled only consumes jobs from its own queue.
+2. Global Auto-Print skips every printer with local Auto-Print enabled, even if that local queue is empty.
+3. A printer is eligible only when its confirmed state is `FREE` and no upload or start is already in flight.
+4. After a terminal job, the printer remains `NEEDS CLEARING` until the bed is physically cleared and **Mark Bed Cleared** is clicked.
+
+There is no automatic ejection in the current release.
+
+## Network discovery
+
+Discovery is restricted to RFC1918 private `/24` networks to avoid scanning public or campus address ranges.
+
+- **Auto:** Uses a detected private adapter, preferring the Windows hotspot subnet `192.168.137.0/24`.
+- **Home/Router:** Accepts a private subnet or a printer/router IP, such as `192.168.1` or `192.168.1.42`.
+- **Hotspot:** Defaults to the Windows hotspot subnet `192.168.137.0/24`.
+
+Campus and company Wi-Fi often blocks client-to-client traffic. Use a laptop hotspot, phone hotspot, or travel router when printers cannot be reached from the dashboard.
+
+Successful discovery updates `printers.json`. You can also create it manually:
+
+```json
+[
+  { "id": "1", "ip": "192.168.137.30" },
+  { "id": "2", "ip": "192.168.137.191" }
+]
+```
+
+## How it works
+
+The stock printer web UI exposes the interfaces PrinterFarm uses:
+
+- HTTP upload: `POST http://<printer-ip>/upload/<filename>`
+- Telemetry and start commands: `ws://<printer-ip>:9999/`
+
+Printer polling is serialized because these printers accept very few simultaneous port `9999` connections. Telemetry arrives in fragments, so each probe uses a short collection window before classifying the printer.
+
+The numeric firmware states used by the tested printer UI are:
+
+| Value | Meaning | Farm behavior |
+|---|---|---|
+| `0` | Stopped | Needs clearing when a file is present |
+| `1` | Printing | Busy |
+| `2` | Complete | Needs clearing |
+| `3` | Failed | Needs clearing |
+| `4` | Aborted | Needs clearing when a file is present |
+| `5` | Paused | Busy/paused |
+
+## Configuration
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PORT` | `3000` | Dashboard HTTP port |
+| `HOST` | `127.0.0.1` | Dashboard bind address |
+| `GCODE_DIR` | `/usr/data/printer_data/gcodes` | Remote printer G-code directory |
+| `HTTP_PORT` | `80` | Printer upload port override |
+
+Set `HOST=0.0.0.0` only on a trusted LAN. PrinterFarm currently has no authentication.
+
+Uploads are limited to 100 MB per file and stored in the local `scratch/` directory. Queue state is session-only.
+
+Planned post-v1 features are tracked in [`ROADMAP.md`](ROADMAP.md).
+
+## Testing
+
+```bash
+npm test
+```
+
+The repository also includes a local protocol simulator:
+
+```bash
 node bin/mock-printer.mjs
 ```
 
-### Running the CLI
-In a separate terminal, you can point the polling engine at the mock server (or a real printer's IP):
+## Compatibility
 
-```bash
-# Connect to the local simulator
-node bin/farm-status.mjs 127.0.0.1
-```
+| Model | Status |
+|---|---|
+| Ender 3 V3 KE | Tested on physical hardware |
+| K1, K1 Max, K2 Plus, CR-10 SE | Unverified; reports welcome |
 
-### Unit Tests
-The `judge()` firewall logic is fully isolated and mathematically verified for 100% branch coverage using the native `node:test` runner.
+Firmware updates can change the unofficial LAN protocol. Include the printer model, firmware version, and relevant server log lines in bug reports.
 
-```bash
-node --test
-```
+## Security
 
-## Security Note
-This software is highly experimental and can physically actuate hardware and start thermal events. 
-By default, the dashboard securely binds to `localhost` (`127.0.0.1:3000`). If you wish to access the dashboard from other devices on your network, you can override the host by running `HOST=0.0.0.0 npm start`. **Only do this on a trusted local area network (LAN).** Never expose port 3000 directly to the internet.
+The server binds to localhost by default. Anyone who can reach an exposed PrinterFarm instance can upload files and control connected printers, so do not expose it to the public internet.
+
+## License
+
+MIT. PrinterFarm is an unofficial community project and is not affiliated with or endorsed by Creality.

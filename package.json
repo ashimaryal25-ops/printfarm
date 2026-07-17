@@ -1,12 +1,14 @@
 {
   "name": "printerfarm",
   "repository": "https://github.com/ashimaryal25-ops/printerfarm",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
-  "description": "No-root orchestration layer for stock Creality printer farms — discover, monitor, and route jobs without USB, firmware modification, OctoPrint, or Moonraker.",
+  "description": "No-root orchestration layer for stock Creality printer farms: monitor and route G-code jobs without USB, firmware modification, OctoPrint, or Moonraker.",
+  "license": "MIT",
   "scripts": {
     "start": "node bin/server.mjs",
-    "status": "node bin/farm-status.mjs"
+    "status": "node bin/farm-status.mjs",
+    "test": "node --test test/**/*.test.mjs"
   },
   "engines": {
     "node": ">=22"
