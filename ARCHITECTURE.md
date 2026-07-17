@@ -1,70 +1,45 @@
-# PrinterFarm Architecture Overview
+# Architecture
 
-You've built a full-stack, air-gapped, zero-dependency Node.js web application that acts as an orchestration middleware between a user and physical 3D printer hardware. 
+PrinterFarm is a zero-runtime-dependency Node.js application with four boundaries.
 
-Here is exactly what you are dealing with, broken down by layer.
+## Dashboard
 
----
+`public/` contains the vanilla HTML, CSS, and browser JavaScript. The browser polls `/api/status`, renders the current farm snapshot, and sends explicit commands to the backend. It never connects to printer control sockets directly.
 
-## 1. Frontend Layer (The Dashboard)
-This is the client-side code running in the browser. It is 100% vanilla (No React, Vue, or Tailwind) making it incredibly fast and completely offline-capable.
+## Server and dispatcher
 
-* **`public/index.html`**: The structural skeleton of the dashboard. Contains the layout for the global queue, the network discovery panel, and a `<template>` tag used to stamp out individual printer cards dynamically.
-* **`public/theme.css` & `public/style.css`**: The styling system. `theme.css` defines the color palette, sizing tokens, and local system fonts. `style.css` handles the layout, grid system, and animations.
-* **`public/app.js`**: The brain of the frontend. It operates on a **polling loop**, fetching `/api/status` from the backend every 2 seconds. When it gets new data, it wipes and redraws the printer cards so the UI is always perfectly in sync with the backend. It also intercepts button clicks (like uploading a file or clicking "Discover") and sends them as API requests to the server.
+`bin/server.mjs` serves the dashboard and owns API-level workflow state: uploads, global and local queues, active dispatches, command locks, and operator overrides. Its dispatcher only selects a printer when all safety gates agree that it is free.
 
----
+Global and printer-local Auto-Print share one selection function. A printer reserved for local Auto-Print is excluded from the global pool, even when its local queue is empty.
 
-## 2. Backend API & Routing Layer (The Server)
-This is the Node.js process that boots up when you run `npm start`. It acts as the bridge between your browser and the farm.
+## Printer protocol
 
-* **`bin/server.mjs`**: The heart of the application (approx 500 lines). Since we didn't use Express.js, this file manually routes all HTTP traffic. 
-  * **Static File Server:** Serves your HTML, CSS, and JS to the browser.
-  * **Upload Handler:** Accepts massive `.gcode` file uploads (up to 100MB) via data streams and saves them directly to your hard drive in the `scratch/` folder.
-  * **API Endpoints:** Handles routes like `/api/status` (giving data to the UI), `/api/start-job`, and `/api/discover`.
-  * **The Dispatcher Loop:** A continuous background timer (`setInterval`) that watches for printers whose state is "FREE". When it finds one, it plucks a job from the Global Queue and hands it to the Hardware Communication layer to start printing.
+`lib/creality.mjs` implements actions against the stock interfaces:
 
----
+- G-code upload over HTTP.
+- Start, pause, resume, and cancel commands over WebSocket port `9999`.
+- Post-command confirmation from printer telemetry.
 
-## 3. State Management Layer (The Memory Store)
-Because multiple parts of the server need to know what's happening simultaneously, state is managed in a central file.
+`lib/probe.mjs` collects fragmented telemetry before classification. `lib/printer-state.mjs` keeps raw firmware-state rules separate from derived farm states.
 
-* **`lib/farm.mjs`**: Think of this as the server's RAM. It holds:
-  * `activePrinters`: The list of known IPs (loaded from `printers.json`).
-  * `farmState`: A live map containing the exact nozzle/bed temps and status of every printer.
-  * `jobQueue`: The global array of `.gcode` jobs waiting for *any* free printer.
-  * `printerQueues`: Specific queues for jobs assigned to a *specific* printer.
-  * `failedJobs` / `completedJobs`: Arrays tracking historical data.
-  * **The Polling Engine (`startFarmPolling`)**: A continuous loop that iterates through every known IP address and calls the Probe layer to ask the printer how it's doing.
+Printers are polled serially. Physical testing showed that concurrent port `9999` probes can make reachable printers appear offline.
 
----
+## Discovery and identity
 
-## 4. Hardware Communication Layer (The Driver)
-This layer contains the highly specialized code that actually talks to the Creality stock firmware.
+`lib/discovery.mjs` scans a bounded RFC1918 `/24` subnet with limited concurrency. Public ranges are rejected before scanning. Discovery updates the active farm only when at least one compatible printer responds.
 
-* **`lib/creality.mjs` (Action Commands)**: Handles telling the printer what to do.
-  * `uploadGcode()`: Uses native `fetch` to send an HTTP POST request containing your `.gcode` file to port `80` on the printer.
-  * `startPrint()`: Opens a raw WebSocket on port `9999` and sends the highly specific JSON command `{"method": "set", "params": {"opGcodeFile": "..."}}` to force the firmware to begin printing.
-* **`lib/probe.mjs` (Telemetry & Telemetry Firewall)**: Handles asking the printer how it's doing.
-  * Opens a WebSocket on port `9999` and requests `"reqPrintObjects"`.
-  * **The `judge()` Firewall:** Because Creality firmware is notoriously buggy (e.g. reporting it is "printing" forever even if you cancel a print), `judge()` intercepts the raw telemetry and mathematically determines what the printer is *actually* doing based on temperatures and file progress, sanitizing the data before passing it to the State Management layer.
+An active dispatch may migrate to a new DHCP address only when the rediscovered printer and exact remote filename produce one unambiguous match. Otherwise the stale dispatch is removed instead of attaching controls to the wrong machine.
 
----
+## Safety invariants
 
-## 5. Network Discovery Layer
-* **`lib/discovery.mjs`**: Calculates your computer's local subnet (e.g., `192.168.137.x`). It then concurrently (but safely) attempts to connect to port 9999 on all 254 possible IP addresses in a matter of seconds. If a device responds with valid Creality telemetry, it captures the IP, adds it to the farm, and writes it to `printers.json`.
+- Auto-Print is off after startup until the operator enables it.
+- A printer cannot receive two simultaneous dispatches or control commands.
+- A start is successful only after telemetry reports the exact uploaded filename.
+- Pause and resume require the corresponding raw firmware state.
+- Cancel and terminal firmware states require physical bed clearing.
+- An unconfirmed command does not silently mark a printer free or retry a physical action.
+- The dashboard binds to localhost by default and has no public-network authentication.
 
----
+## Verification
 
-## 6. Simulation & Testing Layer
-* **`bin/mock-printer.mjs`**: A pure Node.js simulator. It opens a local WebSocket server on `127.0.0.1:9999` and spits out fake temperature and progress data. This allows you to write code and test the UI from your laptop at a coffee shop without needing 4 physical 3D printers sitting in front of you.
-
----
-
-### Data Flow Summary (How a print happens)
-1. You drag a `.gcode` file into the UI. `app.js` POSTs it to `/api/upload`.
-2. `server.mjs` receives the file, saves it to `scratch/`, and adds it to `jobQueue` in `farm.mjs`.
-3. The Polling Engine in `farm.mjs` is constantly using `probe.mjs` to fetch temperatures. It sees Printer 2 is `FREE`.
-4. The Dispatcher Loop in `server.mjs` notices Printer 2 is `FREE` and grabs your `.gcode` from `jobQueue`.
-5. The Dispatcher calls `creality.mjs` to upload the file to Printer 2's port 80 and send the start command over port 9999.
-6. The next time `app.js` fetches `/api/status`, the printer is now `BUSY`, and the UI turns the badge blue!
+Unit tests cover parsing, state derivation, queue selection, discovery bounds, dispatch locking, DHCP migration, and control failures. `test/integration.mjs` runs the real server against `bin/mock-printer.mjs` and verifies upload, Auto-Print, pause, resume, cancel, and deterministic teardown.

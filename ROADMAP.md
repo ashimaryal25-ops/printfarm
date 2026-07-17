@@ -1,16 +1,21 @@
-# PrinterFarm Roadmap
+# Roadmap
 
-## Post-v1: Job History
+## Automatic part ejection
 
-Add a collapsed, session-only Job History section after the core discovery, queue, Auto-Print, DHCP identity, and printer-control workflows are stable in real use.
+Add opt-in, printer-specific ejection profiles only after physical validation of cooling thresholds, toolhead clearance, motion limits, and failure recovery. Ejection must never be added blindly to arbitrary user G-code.
 
-The feature should:
+## Persistent job history
 
-- Keep Active Jobs as the only prominent live-job surface.
-- Normalize started, canceled, and failed records into one newest-first history list.
-- Show filename, printer, timestamp, outcome, and a short diagnostic message.
-- Offer **Add to Queue** only when the retained local G-code file still exists.
-- Add the file to the global queue without directly starting a printer; normal Auto-Print rules apply afterward.
-- Remain collapsed by default, cap retained entries, prevent duplicate records, and avoid unbounded memory growth.
+Add a collapsed history view after the live workflow is stable in broader use. It should normalize started, canceled, and failed records, cap retention, and offer **Add to Queue** only while the original local G-code still exists.
 
-The v1 backend may retain internal dispatch records for recovery and debugging, but the successful-start history is intentionally not exposed in the dashboard.
+## Persistent queues
+
+Restore queues and operator settings safely after a server restart without replaying a job whose physical start status is unknown.
+
+## Compatibility profiles
+
+Collect model and firmware reports, then move protocol paths and state aliases into explicit profiles instead of assuming every Creality LAN implementation matches the Ender 3 V3 KE.
+
+## Authentication
+
+Add an optional trusted-LAN authentication mode before recommending deployment on shared or institution-managed networks.

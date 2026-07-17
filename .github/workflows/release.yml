@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm run verify
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build source archives
+        run: |
+          git archive --format=zip --prefix="printfarm-${GITHUB_REF_NAME}/" -o "printfarm-${GITHUB_REF_NAME}.zip" HEAD
+          git archive --format=tar.gz --prefix="printfarm-${GITHUB_REF_NAME}/" -o "printfarm-${GITHUB_REF_NAME}.tar.gz" HEAD
+          sha256sum "printfarm-${GITHUB_REF_NAME}.zip" "printfarm-${GITHUB_REF_NAME}.tar.gz" > SHA256SUMS
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" printfarm-*.zip printfarm-*.tar.gz SHA256SUMS --verify-tag --generate-notes

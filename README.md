@@ -1,108 +1,85 @@
 # PrinterFarm
 
-PrinterFarm is a local, no-root dashboard for discovering, monitoring, and routing G-code jobs across stock networked Creality printers.
+PrinterFarm is a local dashboard for discovering, monitoring, and routing G-code jobs across stock networked Creality printers.
 
-It talks directly to the printers over their existing LAN interfaces. No Raspberry Pi per printer, custom firmware, Moonraker, or cloud account is required.
+It uses the printers' existing LAN interfaces. No root access, custom firmware, per-printer Raspberry Pi, Moonraker, or cloud account is required.
 
-## What it does
+## Features
 
-- Discovers compatible printers on a private home, router, or hotspot network.
-- Shows printer state, temperatures, active file, and progress in one dashboard.
-- Safe physical control: Pause, Resume, and Cancel jobs directly from the dashboard.
-- Routes a global G-code queue to available printers with global **Auto-Print**.
-- Supports printer-specific queues with independent **Auto-Print** toggles.
-- Reserves local Auto-Print printers from the global queue.
-- Uploads G-code over HTTP and starts prints through the stock port `9999` WebSocket protocol.
-- Confirms a start only when the printer reports the exact filename in the printing state.
-- Keeps complete, stopped, failed, and aborted jobs out of the free pool until the bed is marked clear.
-- Retains internal session records for dispatch recovery and debugging.
+- Discover compatible printers on a private router or hotspot network.
+- Monitor state, temperatures, active file, layer, and progress from one dashboard.
+- Upload G-code to a global queue or a printer-specific queue.
+- Route work with independent global and per-printer Auto-Print controls.
+- Pause, resume, and cancel active jobs through the stock printer protocol.
+- Keep completed, stopped, failed, and aborted printers locked until the bed is marked clear.
+- Follow printers across DHCP address changes when identity and active filename can be matched safely.
+- Develop without hardware using the included printer simulator.
 
 ## Quickstart
 
-Requirements: Node.js 22 or newer and compatible printers on the same private network as this computer.
+Requirements: Node.js 22 or newer and compatible printers on the same private network as the computer running PrinterFarm.
 
 ```bash
-git clone https://github.com/ashimaryal25-ops/printerfarm.git
-cd printerfarm
+git clone https://github.com/ashimaryal25-ops/printfarm.git
+cd printfarm
 npm start
 ```
 
-Open `http://127.0.0.1:3000`, then click **DISCOVER**.
+Open `http://127.0.0.1:3000` and select **Discover**. PrinterFarm has no runtime package dependencies, so `npm install` is not required.
 
-PrinterFarm has no runtime package dependencies, so `npm install` is not required.
+To access the dashboard from a phone on the same trusted network, bind it to the LAN:
 
-## Auto-Print behavior
+```powershell
+$env:HOST="0.0.0.0"
+npm start
+```
 
-Global and printer-local Auto-Print are intentionally separate:
-
-1. A printer with local Auto-Print enabled only consumes jobs from its own queue.
-2. Global Auto-Print skips every printer with local Auto-Print enabled, even if that local queue is empty.
-3. A printer is eligible only when its confirmed state is `FREE` and no upload or start is already in flight.
-4. After a terminal job, the printer remains `NEEDS CLEARING` until the bed is physically cleared and **Mark Bed Cleared** is clicked.
-
-There is no automatic ejection in the current release.
+Then open `http://<computer-ip>:3000` on the phone. Windows Firewall may ask for permission; allow private networks only. Never expose PrinterFarm directly to the public internet.
 
 ## Network discovery
 
-Discovery is restricted to RFC1918 private `/24` networks to avoid scanning public or campus address ranges.
+Discovery scans one RFC1918 private `/24` network at a time.
 
-- **Auto:** Uses a detected private adapter, preferring the Windows hotspot subnet `192.168.137.0/24`.
-- **Home/Router:** Accepts a private subnet or a printer/router IP, such as `192.168.1` or `192.168.1.42`.
-- **Hotspot:** Defaults to the Windows hotspot subnet `192.168.137.0/24`.
+- **Auto** selects a detected private adapter and prefers the Windows hotspot subnet `192.168.137.0/24`.
+- **Home/Router** accepts a private subnet or a printer/router IP such as `192.168.1` or `192.168.1.42`.
+- **Hotspot** defaults to `192.168.137.0/24`.
 
-Campus and company Wi-Fi often blocks client-to-client traffic. Use a laptop hotspot, phone hotspot, or travel router when printers cannot be reached from the dashboard.
+Campus and company Wi-Fi commonly blocks client-to-client traffic. A laptop hotspot, phone hotspot, or travel router avoids that isolation. Successful discovery writes the active addresses to the local `printers.json`, which is intentionally ignored by Git.
 
-Successful discovery updates `printers.json`. You can also create it manually:
+For manual configuration, copy `printers.example.json` to `printers.json` and replace the addresses.
 
-```json
-[
-  { "id": "1", "ip": "192.168.137.30" },
-  { "id": "2", "ip": "192.168.137.191" }
-]
-```
+## Auto-Print safety
 
-## How it works
+Global and printer-local Auto-Print are separate:
 
-The stock printer web UI exposes the interfaces PrinterFarm uses:
+1. A printer with local Auto-Print enabled consumes jobs only from its local queue.
+2. Global Auto-Print skips printers reserved for local Auto-Print.
+3. Dispatch requires a confirmed `FREE` state with no upload, control command, or start already in flight.
+4. A terminal or canceled job produces `NEEDS CLEARING`; another job cannot start until the operator clears the bed and confirms it in the dashboard.
 
-- HTTP upload: `POST http://<printer-ip>/upload/<filename>`
-- Telemetry and start commands: `ws://<printer-ip>:9999/`
-
-Printer polling is serialized because these printers accept very few simultaneous port `9999` connections. Telemetry arrives in fragments, so each probe uses a short collection window before classifying the printer.
-
-The numeric firmware states used by the tested printer UI are:
-
-| Value | Meaning | Farm behavior |
-|---|---|---|
-| `0` | Stopped | Needs clearing when a file is present |
-| `1` | Printing | Busy |
-| `2` | Complete | Needs clearing |
-| `3` | Failed | Needs clearing |
-| `4` | Aborted | Needs clearing when a file is present |
-| `5` | Paused | Busy/paused |
+Automatic part ejection is not included in v1.
 
 ## Configuration
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `PORT` | `3000` | Dashboard HTTP port |
 | `HOST` | `127.0.0.1` | Dashboard bind address |
-| `GCODE_DIR` | `/usr/data/printer_data/gcodes` | Remote printer G-code directory |
-| `HTTP_PORT` | `80` | Printer upload port override |
+| `PORT` | `3000` | Dashboard HTTP port |
+| `HTTP_PORT` | `80` | Printer upload port |
+| `GCODE_DIR` | `/usr/data/printer_data/gcodes` | Remote G-code directory |
 
-Set `HOST=0.0.0.0` only on a trusted LAN. PrinterFarm currently has no authentication.
-
-Uploads are limited to 100 MB per file and stored in the local `scratch/` directory. Queue state is session-only.
-
-Planned post-v1 features are tracked in [`ROADMAP.md`](ROADMAP.md).
+Uploads are limited to 100 MB and stored in `scratch/`. Queues and job records are session-only.
 
 ## Testing
 
 ```bash
 npm test
+npm run test:integration
 ```
 
-The repository also includes a local protocol simulator:
+The unit suite covers protocol parsing, discovery bounds, state classification, queue routing, and control safety. The integration test starts the local simulator and verifies upload, Auto-Print, pause, resume, cancel, and teardown without physical hardware.
+
+Run the simulator manually with:
 
 ```bash
 node bin/mock-printer.mjs
@@ -115,11 +92,13 @@ node bin/mock-printer.mjs
 | Ender 3 V3 KE | Tested on physical hardware |
 | K1, K1 Max, K2 Plus, CR-10 SE | Unverified; reports welcome |
 
-Firmware updates can change the unofficial LAN protocol. Include the printer model, firmware version, and relevant server log lines in bug reports.
+Firmware updates may change the unofficial LAN protocol. Include the printer model, firmware version, and relevant server logs in bug reports.
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the system design and [ROADMAP.md](ROADMAP.md) for deferred features.
 
 ## Security
 
-The server binds to localhost by default. Anyone who can reach an exposed PrinterFarm instance can upload files and control connected printers, so do not expose it to the public internet.
+The dashboard has no authentication. Anyone who can reach an exposed instance can upload files and control connected printers. Keep it on a trusted private network and retain physical supervision appropriate for heated, moving equipment.
 
 ## License
 
