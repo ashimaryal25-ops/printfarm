@@ -78,60 +78,82 @@ server.on('upgrade', (req, socket) => {
     
     const msg = unmasked.toString('utf8');
 
-    // Scenario A: Client sends the "Start Print" command
+    // Scenario A: Client sends the "Start Print", "Pause", "Resume", or "Stop" command
     if (msg.includes('"method":"set"')) {
-      console.log(`[Mock Printer] Received start command... warming up heaters!`);
-      fakeState.deviceState = "print";
-      fakeState.targetNozzleTemp = 210;
-      fakeState.targetBedTemp = 60;
-      fakeState.printProgress = 0;
-      
-      // Extract the requested filename from the raw JSON string
-      const match = msg.match(/printprt:.*\/([^/]+\.gcode)/);
-      if (match) fakeState.printFileName = match[1];
-      
-      // Start a background timer to simulate heating and printing
-      if (progressTimer) clearInterval(progressTimer);
-      
-      progressTimer = setInterval(() => {
-        // 1. Simulate Heating (Simple Linear)
-        let heated = true;
-        
-        // Bed Heating
-        if (fakeState.targetBedTemp > 0) {
-          if (fakeState.bedTemp < fakeState.targetBedTemp) {
-            fakeState.bedTemp = Math.min(fakeState.targetBedTemp, fakeState.bedTemp + 5);
-            heated = false;
-          }
-        } else if (fakeState.bedTemp > 25) {
-          fakeState.bedTemp = Math.max(25, fakeState.bedTemp - 5);
-        }
-        
-        // Nozzle Heating
-        if (fakeState.targetNozzleTemp > 0) {
-          if (fakeState.nozzleTemp < fakeState.targetNozzleTemp) {
-            fakeState.nozzleTemp = Math.min(fakeState.targetNozzleTemp, fakeState.nozzleTemp + 15);
-            heated = false;
-          }
-        } else if (fakeState.nozzleTemp > 25) {
-          fakeState.nozzleTemp = Math.max(25, fakeState.nozzleTemp - 15);
-        }
+      let m;
+      try { m = JSON.parse(msg); } catch (e) {}
 
-        // 2. Simulate Printing (only after heated)
-        if (heated && fakeState.printProgress < 100) {
-          fakeState.printProgress += 1;
-        }
+      if (m && m.params && m.params.pause === 1) {
+        console.log(`[Mock Printer] Received pause command`);
+        fakeState.deviceState = "5";
+        return;
+      }
+      
+      if (m && m.params && m.params.pause === 0) {
+        console.log(`[Mock Printer] Received resume command`);
+        fakeState.deviceState = "1";
+        return;
+      }
+      
+      if (m && m.params && m.params.stop === 1) {
+        console.log(`[Mock Printer] Received stop command`);
+        fakeState.deviceState = "4"; // aborted
+        if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
+        return;
+      }
+
+      if (m && m.params && m.params.opGcodeFile) {
+        console.log(`[Mock Printer] Received start command... warming up heaters!`);
+        fakeState.deviceState = "1";
+        fakeState.targetNozzleTemp = 210;
+        fakeState.targetBedTemp = 60;
+        fakeState.printProgress = 0;
         
-        // When finished, reset state
-        if (fakeState.printProgress >= 100) {
-          clearInterval(progressTimer);
-          progressTimer = null;
-          fakeState.deviceState = "free";
-          fakeState.targetNozzleTemp = 0;
-          fakeState.targetBedTemp = 0;
-        }
-      }, 1000);
-      return;
+        const match = m.params.opGcodeFile.match(/printprt:.*\/([^/]+\.gcode)/);
+        if (match) fakeState.printFileName = match[1];
+        
+        if (progressTimer) clearInterval(progressTimer);
+        
+        progressTimer = setInterval(() => {
+          if (fakeState.deviceState === "5") return; // Paused, don't heat or print
+          if (fakeState.deviceState === "4" || fakeState.deviceState === "2" || fakeState.deviceState === "3" || fakeState.deviceState === "0") {
+             clearInterval(progressTimer); progressTimer = null; return;
+          }
+
+          let heated = true;
+          
+          if (fakeState.targetBedTemp > 0) {
+            if (fakeState.bedTemp < fakeState.targetBedTemp) {
+              fakeState.bedTemp = Math.min(fakeState.targetBedTemp, fakeState.bedTemp + 5);
+              heated = false;
+            }
+          } else if (fakeState.bedTemp > 25) {
+            fakeState.bedTemp = Math.max(25, fakeState.bedTemp - 5);
+          }
+          
+          if (fakeState.targetNozzleTemp > 0) {
+            if (fakeState.nozzleTemp < fakeState.targetNozzleTemp) {
+              fakeState.nozzleTemp = Math.min(fakeState.targetNozzleTemp, fakeState.nozzleTemp + 15);
+              heated = false;
+            }
+          } else if (fakeState.nozzleTemp > 25) {
+            fakeState.nozzleTemp = Math.max(25, fakeState.nozzleTemp - 15);
+          }
+
+          if (heated && fakeState.printProgress < 100) {
+            fakeState.printProgress += 1;
+          }
+          
+          if (fakeState.printProgress >= 100) {
+            clearInterval(progressTimer);
+            progressTimer = null;
+            fakeState.deviceState = "2"; // Complete
+            fakeState.targetNozzleTemp = 0;
+            fakeState.targetBedTemp = 0;
+          }
+        }, 1000);
+        return;
+      }
     }
 
     // Scenario B: Client asks for live telemetry

@@ -5,16 +5,10 @@
 //   node bin/farm-status.mjs 192.168.137.10 192.168.137.78
 
 import { readFileSync, existsSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 import { startFarmPolling, farmState } from "../lib/farm.mjs";
 
 const PRINTERS_JSON = "printers.json";
-const ipArgs = process.argv.slice(2);
-let printers = ipArgs.map((ip, i) => ({ id: String(i + 1), ip }));
-
-if (printers.length === 0 && existsSync(PRINTERS_JSON)) {
-  printers = JSON.parse(readFileSync(PRINTERS_JSON, "utf8"));
-}
-
 if (printers.length === 0) {
   console.error("usage: node bin/farm-status.mjs <ip> [ip...]   (or create printers.json)");
   process.exit(1);
