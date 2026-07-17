@@ -4,68 +4,129 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PrinterFarm Dashboard</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="theme.css">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="app-header">
-    <h1>PrinterFarm</h1>
-    <p class="subtitle">Live Telemetry & Control Center</p>
+    <div class="header-titles">
+      <h1>PrinterFarm</h1>
+      <p class="subtitle">Live Telemetry & Control Center</p>
+    </div>
+    <div class="farm-summary">
+      <span class="summary-item">Total: <b id="sum-total">0</b></span>
+      <span class="summary-item status-free">Free: <b id="sum-free">0</b></span>
+      <span class="summary-item status-printing">Busy: <b id="sum-busy">0</b></span>
+      <span class="summary-item status-heating">Needs Clearing: <b id="sum-clear">0</b></span>
+      <span class="summary-item" style="color: var(--color-secondary);">Offline: <b id="sum-offline">0</b></span>
+      <span class="summary-item status-error">Error: <b id="sum-error">0</b></span>
+    </div>
   </header>
 
-  <div class="global-queue-section">
-    <div class="upload-zone global-upload" id="globalUpload">
-      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="upload-icon">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-        <polyline points="17 8 12 3 7 8"></polyline>
-        <line x1="12" y1="3" x2="12" y2="15"></line>
-      </svg>
-      <label>Drop .gcode to Add to Queue</label>
-      <input type="file" accept=".gcode" id="globalFileInput">
-    </div>
-    
-    <div class="queue-list-container">
-      <div class="queue-header">
-        <h3>Queue (<span id="queueCount">0</span>)</h3>
-        <div class="auto-assign-toggle">
-          <label class="toggle-switch">
-            <input type="checkbox" id="autoAssignCheck" checked>
-            <span class="slider"></span>
-          </label>
-          <span class="toggle-label">Auto-Print Jobs</span>
-          <span class="tooltip" title="When checked, jobs automatically go to the next free printer. Uncheck to manually assign jobs.">?</span>
+  <div class="dashboard-layout">
+    <aside class="sidebar">
+      <div class="global-queue-section">
+        <div class="upload-zone global-upload" id="globalUpload">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="upload-icon">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          <label>Add G-code</label>
+          <span class="upload-hint">Drop a file here or browse</span>
+          <span class="upload-cta">Choose file</span>
+          <input type="file" accept=".gcode" id="globalFileInput">
         </div>
-      </div>
-      <ul id="queueList" class="queue-list">
-        <!-- Queue items injected here -->
-      </ul>
-    </div>
-  </div>
+        <div class="discovery-section">
+          <h3>Network Discovery</h3>
+          <div class="discovery-mode-selector" style="display: flex; gap: 8px; margin-bottom: 8px; font-size: 11px;">
+            <label><input type="radio" name="discoveryMode" value="auto" checked> Auto</label>
+            <label><input type="radio" name="discoveryMode" value="home"> Home/Router</label>
+            <label><input type="radio" name="discoveryMode" value="hotspot"> Hotspot</label>
+          </div>
+          <div id="discoveryDescription" style="font-size: 10px; color: var(--color-secondary); margin-bottom: 8px;">
+            Auto-detects your local private network.
+          </div>
+          <button id="tryHotspotBtn" class="action-btn" style="padding: 2px 6px; font-size: 10px; margin-bottom: 8px; display: none;">Try Windows Hotspot</button>
+          <div class="discovery-controls" style="display: flex; gap: 8px;">
+            <input type="text" id="subnetInput" placeholder="192.168.1 or printer IP" class="action-input" style="display: none; flex: 2;">
+            <button id="scanBtn" class="action-btn assign-btn discovery-scan-btn" style="flex: 1;">DISCOVER</button>
+          </div>
+          <div id="scanStatus" class="discovery-status" style="margin-top: 8px;"></div>
+        </div>
+        
+        <div class="queue-list-container">
+          <div class="queue-header">
+            <h3>Queue (<span id="queueCount">0</span>)</h3>
+            <div class="auto-assign-toggle">
+              <label class="toggle-switch">
+                <input type="checkbox" id="autoAssignCheck">
+                <span class="slider"></span>
+              </label>
+              <span class="toggle-label">Auto-Print</span>
+              <span class="tooltip" title="When checked, jobs automatically go to the next free printer. Uncheck to manually assign jobs.">?</span>
+            </div>
+          </div>
+          <ul id="queueList" class="queue-list">
+            <!-- Queue items injected here -->
+          </ul>
+        </div>
 
-  <main class="farm-grid" id="printer-grid">
-    <!-- Printer cards will be injected here by app.js -->
-  </main>
+        <div class="queue-list-container" id="failedJobsContainer" style="display: none; border-color: rgba(239, 68, 68, 0.3);">
+          <div class="queue-header" style="border-bottom-color: rgba(239, 68, 68, 0.3);">
+            <h3 style="color: var(--color-status-error);">Failed Jobs (<span id="failedCount">0</span>)</h3>
+          </div>
+          <ul id="failedList" class="queue-list failed-list" style="height: auto; max-height: 150px;">
+            <!-- Failed items injected here -->
+          </ul>
+        </div>
+
+      </div>
+    </aside>
+
+    <main class="farm-content">
+      <section class="active-jobs-panel" aria-labelledby="active-jobs-title">
+        <div class="active-jobs-header">
+          <h2 id="active-jobs-title">Active Jobs</h2>
+          <span id="activeJobsCount">0 active</span>
+        </div>
+        <div id="activeJobsList" class="active-jobs-list" aria-live="polite">
+          <div class="active-job-empty">No jobs are currently active.</div>
+        </div>
+      </section>
+
+      <div class="farm-grid" id="printer-grid">
+        <!-- Printer cards will be injected here by app.js -->
+      </div>
+    </main>
+  </div>
 
   <!-- Template for a Printer Card -->
   <template id="printer-card-template">
     <div class="printer-card">
-      <div class="printer-card-header">
-        <h3 class="printer-name">Printer</h3>
-        <span class="status-badge">FREE</span>
+      <div class="card-header">
+        <div>
+          <h3 class="printer-name">Printer</h3>
+          <span class="printer-ip">0.0.0.0</span>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <span class="status-badge">FREE</span>
+        </div>
       </div>
 
-      <div class="stats-grid">
+      <div class="stats">
         <div class="stat-group">
           <span class="stat-label">NOZZLE</span>
-          <span class="stat-value nozzle-temp">0 / 0°C</span>
+          <span class="stat-value nozzle-temp">-- / --&deg;C</span>
         </div>
         <div class="stat-group">
           <span class="stat-label">BED</span>
-          <span class="stat-value bed-temp">0 / 0°C</span>
+          <span class="stat-value bed-temp">-- / --&deg;C</span>
         </div>
+      </div>
+      
+      <div class="offline-message" style="display: none; font-size: 10px; color: var(--color-secondary); padding: 8px; text-align: center; font-style: italic;">
+        Printer not responding. Check power, hotspot/router connection, or open the printer IP in a browser.
       </div>
 
       <div class="progress-section" style="display: none;">
@@ -75,29 +136,47 @@
         <span class="progress-text">0%</span>
       </div>
       
-      <div class="manual-assign-section" style="display: none;">
-        <select class="job-select">
-          <option value="">Select a job...</option>
-        </select>
-        <button class="assign-btn">ADD TO PRINTER</button>
-      </div>
-
-      <div class="local-queue-section">
-        <div class="local-queue-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-sm);">
-          <h4 style="margin-bottom: 0;">Printer Queue</h4>
-          <label class="local-upload-btn" title="Upload directly to printer queue" style="cursor: pointer; color: var(--color-primary); padding: 8px; border-radius: var(--radius-sm); box-shadow: var(--shadow-extrude); transition: all 0.2s ease;">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <div class="printer-actions-section">
+        <!-- 1. Select from global queue -->
+        <div class="manual-assign-section action-row" style="display: none;">
+          <select class="job-select action-input" title="Select Job">
+            <option value="">Select a file from queue...</option>
+          </select>
+          <button class="action-btn assign-btn manual-add-btn" title="Add Job to Printer Queue">ADD</button>
+        </div>
+        
+        <!-- 2. Direct upload to printer -->
+        <div class="action-row local-upload-section">
+          <div class="action-input fake-input-text">Upload to Printer</div>
+          <label class="action-btn local-upload-btn" title="Upload directly to printer queue">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
               <polyline points="17 8 12 3 7 8"></polyline>
               <line x1="12" y1="3" x2="12" y2="15"></line>
             </svg>
+            UPLOAD
             <input type="file" accept=".gcode" class="local-file-input" style="display: none;">
+          </label>
+        </div>
+      </div>
+
+      <div class="local-queue-section">
+        <div class="local-queue-header">
+          <h4>Printer Queue</h4>
+          <label class="local-auto-toggle" title="Automatically start this printer queue when the printer is free">
+            <span>Auto-Print</span>
+            <span class="toggle-switch">
+              <input type="checkbox" class="local-auto-check">
+              <span class="slider"></span>
+            </span>
           </label>
         </div>
         <ul class="local-queue-list"></ul>
       </div>
 
       <button class="clear-bed-btn" style="display: none;">Mark Bed Cleared</button>
+      
+      <div class="raw-debug-view" style="display: none; white-space: pre-wrap; font-family: monospace; font-size: 10px; color: var(--color-secondary); margin-top: 16px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px; overflow-x: auto;"></div>
     </div>
   </template>
 
