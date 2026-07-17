@@ -1,82 +1,153 @@
-import { spawn } from 'node:child_process';
-import { setTimeout } from 'node:timers/promises';
+import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import assert from 'node:assert';
+import path from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 
-async function request(path, method = 'GET') {
-  const res = await fetch(`http://127.0.0.1:3000${path}`, { method });
-  const text = await res.text();
-  let json = null;
-  try { json = JSON.parse(text); } catch {}
-  return { status: res.status, body: json || text };
+process.env.HTTP_PORT = '9999';
+
+const {
+  activeDispatches,
+  completedJobs,
+  controlOperations,
+  controlWarnings,
+  failedJobs,
+  localAutoPrint,
+  server,
+  startDispatcher,
+  stopDispatcher
+} = await import('../bin/server.mjs');
+const { startMockPrinter, stopMockPrinter } = await import('../bin/mock-printer.mjs');
+const {
+  farmState,
+  jobQueue,
+  manualOverrides,
+  printerQueues,
+  setPrinters,
+  settings,
+  startFarmPolling,
+  stopFarmPolling
+} = await import('../lib/farm.mjs');
+
+const scratchBefore = new Set(fs.readdirSync('scratch'));
+
+function listen() {
+  return new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve(server.address().port);
+    });
+  });
 }
 
-async function run() {
-  const BACKUP = 'printers.json.bak';
-  if (fs.existsSync('printers.json')) fs.renameSync('printers.json', BACKUP);
-  fs.writeFileSync('printers.json', JSON.stringify([{ id: "1", ip: "127.0.0.1" }]));
+function closeServer() {
+  if (!server.listening) return Promise.resolve();
+  server.closeAllConnections?.();
+  return new Promise((resolve, reject) => {
+    server.close(error => error ? reject(error) : resolve());
+  });
+}
 
-  let mock, server;
-  
-  try {
-    console.log("Starting mock printer...");
-    mock = spawn('node', ['bin/mock-printer.mjs']);
-    
-    console.log("Starting server...");
-    server = spawn('node', ['bin/server.mjs'], { env: { ...process.env, PORT: '3000' } });
-    
-    await setTimeout(4000); // give them time to start and probe
-    
-    // Enable auto-assign so dispatcher picks up the job
-    await fetch('http://127.0.0.1:3000/api/settings/auto-assign?value=true', { method: 'POST' });
-    
-    const form = new FormData();
-    form.append('file', new Blob([Buffer.from('GCODE')]), 'test.gcode');
-    const uploadRes = await fetch('http://127.0.0.1:3000/api/upload?filename=test.gcode', { method: 'POST', body: form });
-    assert.strictEqual(uploadRes.status, 200, 'Upload should succeed');
-    
-    await setTimeout(4000); // wait for start confirmation
-    let statusRes = await request('/api/status');
-    assert.strictEqual(statusRes.body.farmState['1']?.farmState, 'busy', 'State should be busy after start');
-    
-    console.log("Pausing...");
-    const pauseRes = await request('/api/printers/pause?ip=127.0.0.1', 'POST');
-    assert.strictEqual(pauseRes.status, 200, 'Pause should succeed');
-    await setTimeout(2000);
-    statusRes = await request('/api/status');
-    assert.strictEqual(statusRes.body.farmState['1']?.farmState, 'paused', 'State should be paused');
-    
-    console.log("Resuming...");
-    const resumeRes = await request('/api/printers/resume?ip=127.0.0.1', 'POST');
-    assert.strictEqual(resumeRes.status, 200, 'Resume should succeed');
-    await setTimeout(2000);
-    statusRes = await request('/api/status');
-    assert.strictEqual(statusRes.body.farmState['1']?.farmState, 'busy', 'State should be busy again');
-    
-    console.log("Canceling...");
-    const cancelRes = await request('/api/printers/cancel?ip=127.0.0.1', 'POST');
-    assert.strictEqual(cancelRes.status, 200, 'Cancel should succeed');
-    await setTimeout(2000);
-    statusRes = await request('/api/status');
-    assert.strictEqual(statusRes.body.farmState['1']?.farmState, 'needs_clearing', 'State should be needs_clearing');
-    
-    console.log("Integration test complete.");
-  } finally {
-    if (mock) mock.kill();
-    if (server) server.kill();
-    if (fs.existsSync(BACKUP)) {
-      fs.renameSync(BACKUP, 'printers.json');
-    } else if (fs.existsSync('printers.json')) {
-      fs.unlinkSync('printers.json');
-    }
-    const scratchFiles = fs.readdirSync('scratch');
-    for (const file of scratchFiles) {
-      if (file.endsWith('_test.gcode')) fs.unlinkSync(`scratch/${file}`);
+async function waitFor(check, message, timeoutMs = 20_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const value = await check();
+    if (value) return value;
+    await delay(100);
+  }
+  throw new Error(`Timed out waiting for ${message}`);
+}
+
+let baseUrl;
+async function request(route, options) {
+  const response = await fetch(`${baseUrl}${route}`, options);
+  const text = await response.text();
+  let body = text;
+  try { body = JSON.parse(text); } catch {}
+  return { response, body };
+}
+
+async function status() {
+  const result = await request('/api/status');
+  assert.equal(result.response.status, 200);
+  return result.body;
+}
+
+try {
+  await startMockPrinter();
+  const port = await listen();
+  baseUrl = `http://127.0.0.1:${port}`;
+
+  const printers = [{ id: '1', ip: '127.0.0.1' }];
+  setPrinters(printers);
+  startFarmPolling(printers, 100);
+  startDispatcher();
+
+  await waitFor(
+    async () => (await status()).farmState?.['1']?.farmState === 'free',
+    'the mock printer to become free'
+  );
+
+  let result = await request('/api/settings/auto-assign?value=true', { method: 'POST' });
+  assert.equal(result.response.status, 200);
+
+  result = await request('/api/upload?filename=integration.gcode', {
+    method: 'POST',
+    body: 'G28\nM84\n'
+  });
+  assert.equal(result.response.status, 200);
+
+  await waitFor(async () => {
+    const data = await status();
+    return data.activeJobs?.some(job =>
+      job.printerIp === '127.0.0.1' && job.phase === 'printing'
+    );
+  }, 'Auto-Print to start printing', 30_000);
+
+  result = await request('/api/printers/pause?ip=127.0.0.1', { method: 'POST' });
+  assert.equal(result.response.status, 200);
+  await waitFor(
+    async () => (await status()).farmState?.['1']?.farmState === 'paused',
+    'the printer to pause'
+  );
+
+  result = await request('/api/printers/resume?ip=127.0.0.1', { method: 'POST' });
+  assert.equal(result.response.status, 200);
+  await waitFor(
+    async () => (await status()).farmState?.['1']?.farmState === 'busy',
+    'the printer to resume'
+  );
+
+  result = await request('/api/printers/cancel?ip=127.0.0.1', { method: 'POST' });
+  assert.equal(result.response.status, 200);
+  await waitFor(
+    async () => (await status()).farmState?.['1']?.farmState === 'needs_clearing',
+    'the canceled printer to require bed clearing'
+  );
+
+  console.log('Integration flow passed: upload, Auto-Print, pause, resume, cancel.');
+} finally {
+  settings.autoAssign = false;
+  stopDispatcher();
+  stopFarmPolling();
+  await closeServer();
+  await stopMockPrinter();
+
+  setPrinters([]);
+  farmState.clear();
+  jobQueue.length = 0;
+  printerQueues.clear();
+  manualOverrides.clear();
+  activeDispatches.clear();
+  controlOperations.clear();
+  controlWarnings.clear();
+  localAutoPrint.clear();
+  completedJobs.length = 0;
+  failedJobs.length = 0;
+
+  for (const file of fs.readdirSync('scratch')) {
+    if (!scratchBefore.has(file)) {
+      fs.rmSync(path.join('scratch', file), { force: true });
     }
   }
 }
-
-run().catch((err) => {
-  console.error("Test failed:", err);
-  process.exit(1);
-});

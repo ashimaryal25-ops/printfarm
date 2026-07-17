@@ -1,7 +1,8 @@
 import { createServer } from 'node:http';
 import { createHash } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
 
-const PORT = 9999;
+const DEFAULT_PORT = 9999;
 
 // The global mutable state of our mock printer
 let fakeState = {
@@ -15,6 +16,7 @@ let fakeState = {
 };
 
 let progressTimer = null;
+const sockets = new Set();
 
 // We use the raw Node.js HTTP server to handle both file uploads and WebSockets
 const server = createServer((req, res) => {
@@ -37,6 +39,8 @@ const server = createServer((req, res) => {
 
 // 2. Handle WebSocket upgrades
 server.on('upgrade', (req, socket) => {
+  sockets.add(socket);
+  socket.once('close', () => sockets.delete(socket));
   const key = req.headers['sec-websocket-key'];
   if (!key) return socket.end();
 
@@ -180,7 +184,43 @@ server.on('upgrade', (req, socket) => {
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`[Mock Printer] The Ultimate Simulator is running on 127.0.0.1:${PORT}`);
-  console.log(`Ready for HTTP file uploads and WebSocket telemetry.`);
-});
+export function startMockPrinter({ port = DEFAULT_PORT, host = '127.0.0.1' } = {}) {
+  if (server.listening) return Promise.resolve(server);
+
+  return new Promise((resolve, reject) => {
+    const onError = error => {
+      server.off('listening', onListening);
+      reject(error);
+    };
+    const onListening = () => {
+      server.off('error', onError);
+      resolve(server);
+    };
+
+    server.once('error', onError);
+    server.once('listening', onListening);
+    server.listen(port, host);
+  });
+}
+
+export function stopMockPrinter() {
+  if (progressTimer) {
+    clearInterval(progressTimer);
+    progressTimer = null;
+  }
+  if (!server.listening) return Promise.resolve();
+
+  for (const socket of sockets) socket.destroy();
+  sockets.clear();
+  server.closeAllConnections?.();
+  return new Promise((resolve, reject) => {
+    server.close(error => error ? reject(error) : resolve());
+  });
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const port = Number(process.env.MOCK_PRINTER_PORT || DEFAULT_PORT);
+  await startMockPrinter({ port });
+  console.log(`[Mock Printer] Simulator running on 127.0.0.1:${port}`);
+  console.log('Ready for HTTP file uploads and WebSocket telemetry.');
+}

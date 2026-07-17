@@ -553,7 +553,7 @@ export const server = http.createServer(async (req, res) => {
           delete completedJob.status;
           completedJobs.push(completedJob);
         } else {
-          console.warn(`[Dispatcher] sent but UNCONFIRMED — requeued ${remoteFilename} for ${ip}`);
+          console.warn(`[Dispatcher] sent but UNCONFIRMED - requeued ${remoteFilename} for ${ip}`);
           throw new Error('Unconfirmed start');
         }
       } catch (err) {
@@ -842,7 +842,7 @@ export function startDispatcher() {
           delete completedJob.status;
           completedJobs.push(completedJob);
         } else {
-          console.warn(`[Dispatcher] sent but UNCONFIRMED — requeued ${remoteFilename} for ${state.ip}`);
+          console.warn(`[Dispatcher] sent but UNCONFIRMED - requeued ${remoteFilename} for ${state.ip}`);
           throw new Error('Unconfirmed start');
         }
       } catch (err) {
@@ -907,8 +907,3 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   });
 }
 
-process.on('uncaughtException', (err) => { console.error('UNCAUGHT EXCEPTION:', err); process.exit(1); });
-
-process.removeAllListeners('uncaughtException'); process.removeAllListeners('unhandledRejection');
-process.on('uncaughtException', (err) => { fs.writeFileSync('CRASH.log', 'UNCAUGHT: ' + (err && err.stack || err)); process.exit(1); });
-process.on('unhandledRejection', (err) => { fs.writeFileSync('CRASH.log', 'UNHANDLED: ' + (err && err.stack || err)); process.exit(1); });
