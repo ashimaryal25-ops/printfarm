@@ -17,6 +17,12 @@ test('judge() - Returns error if network connection fails', () => {
   assert.equal(result.displayJob, "timeout");
 });
 
+test('judge() - Incomplete online telemetry is never classified as free', () => {
+  const result = judge({ id: '1', ip: '127.0.0.1', status: 'online', job: {} });
+  assert.equal(result.farmState, 'error');
+  assert.equal(result.telemetryComplete, false);
+});
+
 test('judge() - Marks a printer as busy during an active print', () => {
   // Pass a simulated printer object with hot heaters
   const input = {

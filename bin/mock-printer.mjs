@@ -18,6 +18,51 @@ let fakeState = {
 let progressTimer = null;
 const sockets = new Set();
 
+export function decodeWebSocketFrames(pending, chunk) {
+  let buffer = Buffer.concat([pending, chunk]);
+  const frames = [];
+
+  while (buffer.length >= 2) {
+    const opcode = buffer[0] & 0x0f;
+    const isMasked = (buffer[1] & 0x80) !== 0;
+    let payloadLength = buffer[1] & 0x7f;
+    let offset = 2;
+
+    if (payloadLength === 126) {
+      if (buffer.length < 4) break;
+      payloadLength = buffer.readUInt16BE(2);
+      offset = 4;
+    } else if (payloadLength === 127) {
+      if (buffer.length < 10) break;
+      const largeLength = buffer.readBigUInt64BE(2);
+      if (largeLength > BigInt(Number.MAX_SAFE_INTEGER)) {
+        throw new Error('WebSocket frame is too large');
+      }
+      payloadLength = Number(largeLength);
+      offset = 10;
+    }
+
+    const maskLength = isMasked ? 4 : 0;
+    const frameLength = offset + maskLength + payloadLength;
+    if (buffer.length < frameLength) break;
+
+    let payload = buffer.subarray(offset + maskLength, frameLength);
+    if (isMasked) {
+      const mask = buffer.subarray(offset, offset + 4);
+      const decoded = Buffer.alloc(payload.length);
+      for (let i = 0; i < payload.length; i++) {
+        decoded[i] = payload[i] ^ mask[i % 4];
+      }
+      payload = decoded;
+    }
+
+    frames.push({ opcode, payload });
+    buffer = buffer.subarray(frameLength);
+  }
+
+  return { pending: buffer, frames };
+}
+
 // We use the raw Node.js HTTP server to handle both file uploads and WebSockets
 const server = createServer((req, res) => {
   
@@ -60,27 +105,24 @@ server.on('upgrade', (req, socket) => {
     // Ignore client disconnects
   });
 
-  socket.on('data', (buffer) => {
-    if (buffer.length < 6) return;
-    
-    // Client frames MUST be masked. We have to manually unmask the binary payload.
-    const isMasked = (buffer[1] & 0x80) === 0x80;
-    if (!isMasked) return; 
-
-    let payloadLength = buffer[1] & 0x7F;
-    let offset = 2;
-    if (payloadLength === 126) offset += 2;
-    else if (payloadLength === 127) offset += 8;
-
-    const maskKey = buffer.slice(offset, offset + 4);
-    offset += 4;
-    
-    const unmasked = Buffer.alloc(buffer.length - offset);
-    for (let i = 0; i < unmasked.length; i++) {
-      unmasked[i] = buffer[offset + i] ^ maskKey[i % 4];
+  let pending = Buffer.alloc(0);
+  socket.on('data', (chunk) => {
+    try {
+      const decoded = decodeWebSocketFrames(pending, chunk);
+      pending = decoded.pending;
+      for (const frame of decoded.frames) {
+        if (frame.opcode === 8) {
+          socket.end();
+        } else if (frame.opcode === 1) {
+          handleMessage(frame.payload.toString('utf8'));
+        }
+      }
+    } catch {
+      socket.destroy();
     }
-    
-    const msg = unmasked.toString('utf8');
+  });
+
+  function handleMessage(msg) {
 
     // Scenario A: Client sends the "Start Print", "Pause", "Resume", or "Stop" command
     if (msg.includes('"method":"set"')) {
@@ -181,7 +223,7 @@ server.on('upgrade', (req, socket) => {
       }
       socket.write(frame);
     }
-  });
+  }
 });
 
 export function startMockPrinter({ port = DEFAULT_PORT, host = '127.0.0.1' } = {}) {

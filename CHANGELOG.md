@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Fixed split or coalesced mock WebSocket frames during concurrent polling and controls.
+- Prevented incomplete telemetry windows from making a printer appear free or triggering a false bed-clearing transition.
+
 ## 1.0.0 - 2026-07-17
 
 - Added bounded private-network discovery and persistent local printer addresses.
