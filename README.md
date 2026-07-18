@@ -27,6 +27,21 @@ npm start
 
 Open `http://127.0.0.1:3000` and select **Discover**. PrinterFarm has no runtime package dependencies, so `npm install` is not required.
 
+### No printer? Try the simulator
+
+The repository includes a full protocol simulator, so you can run the entire dashboard — uploads, Auto-Print, pause/resume/cancel, bed clearing — without owning a printer:
+
+```bash
+# terminal A: a fake Creality printer on localhost
+node bin/mock-printer.mjs
+
+# terminal B: point the farm at it and start
+echo '[{ "id": "1", "ip": "127.0.0.1" }]' > printers.json
+npm start
+```
+
+Upload any `.gcode` file to the global queue, add it to Printer 1, and press START — the simulator heats up, reports progress, and finishes like real hardware.
+
 To access the dashboard from a phone on the same trusted network, bind it to the LAN:
 
 ```powershell

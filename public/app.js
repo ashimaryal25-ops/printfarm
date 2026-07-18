@@ -699,6 +699,12 @@ async function fetchStatus() {
       }
     }
 
+    // First-run empty state: no printers configured or discovered yet
+    const emptyState = document.getElementById('farm-empty-state');
+    if (emptyState) {
+      emptyState.style.display = Object.keys(data.farmState).length === 0 ? 'block' : 'none';
+    }
+
     // Update Summary Row DOM
     const sumTotalEl = document.getElementById('sum-total');
     if (sumTotalEl) sumTotalEl.textContent = sumTotal;

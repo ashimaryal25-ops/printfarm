@@ -21,7 +21,9 @@ if (!fs.existsSync(SCRATCH_DIR)) fs.mkdirSync(SCRATCH_DIR);
 
 // Load printers
 const PRINTERS_JSON = "printers.json";
-let printers = [{ id: "1", ip: "127.0.0.1" }]; // Default for local simulator
+// No default printers: a fresh install starts empty and uses Discovery (or a
+// hand-written printers.json) instead of showing a phantom offline printer.
+let printers = [];
 if (fs.existsSync(PRINTERS_JSON)) {
   try {
     printers = JSON.parse(fs.readFileSync(PRINTERS_JSON, "utf8"));
