@@ -1,6 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { judge } from '../lib/probe.mjs';
+import { derivePrintProgress, judge } from '../lib/probe.mjs';
+
+test('derivePrintProgress() falls back to advancing layer telemetry', () => {
+  assert.equal(derivePrintProgress(0, 9, 18), 50);
+  assert.equal(derivePrintProgress(undefined, 1, 3), 33);
+  assert.equal(derivePrintProgress(0, 0, 18), 0);
+  assert.equal(derivePrintProgress(27, 9, 18), 27);
+});
 
 test('judge() - Returns error if network connection fails', () => {
   // Pass a simulated printer object that failed to connect
@@ -41,7 +48,27 @@ test('judge() - Marks a printer as busy during an active print', () => {
   const result = judge(input);
 
   assert.equal(result.farmState, "busy");
-  assert.equal(result.displayJob, "test.gcode 50%");
+  assert.equal(result.displayJob, "test.gcode");
+  assert.equal(result.printProgress, 50);
+});
+
+test('judge() derives progress from layers when printer percentage is stuck at zero', () => {
+  const result = judge({
+    id: '4',
+    ip: '192.168.137.134',
+    status: 'online',
+    job: {
+      deviceState: 'print',
+      printFileName: 'kf_eric.gcode',
+      printProgress: 0,
+      layer: 9,
+      totalLayer: 18
+    }
+  });
+
+  assert.equal(result.farmState, 'busy');
+  assert.equal(result.printProgress, 50);
+  assert.equal(result.displayJob, 'kf_eric.gcode');
 });
 
 test('judge() - Keeps a reported print busy while target temperatures are zero', () => {

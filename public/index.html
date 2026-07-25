@@ -33,9 +33,9 @@
             <line x1="12" y1="3" x2="12" y2="15"></line>
           </svg>
           <label>Add G-code</label>
-          <span class="upload-hint">Drop a file here or browse</span>
-          <span class="upload-cta">Choose file</span>
-          <input type="file" accept=".gcode" id="globalFileInput">
+          <span class="upload-hint">Drop files here or browse</span>
+          <span class="upload-cta">Choose files</span>
+          <input type="file" accept=".gcode" id="globalFileInput" multiple>
         </div>
         <div class="discovery-section">
           <h3>Network Discovery</h3>
@@ -102,9 +102,7 @@
       <div id="farm-empty-state" style="display: none; padding: 32px; text-align: center; color: var(--color-secondary); border: 1px dashed var(--color-border, #444); border-radius: 8px; margin-top: 8px;">
         <p style="margin-bottom: 8px; font-weight: 600;">No printers yet</p>
         <p style="font-size: 12px; line-height: 1.6;">
-          Use <strong>DISCOVER</strong> in the sidebar to scan your network for printers.<br>
-          No printer? Run the simulator: <code>node bin/mock-printer.mjs</code>, add
-          <code>{ "id": "1", "ip": "127.0.0.1" }</code> to <code>printers.json</code>, and restart.
+          Use <strong>DISCOVER</strong> in the sidebar to find printers on your network.
         </p>
       </div>
     </main>

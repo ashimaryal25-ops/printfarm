@@ -731,21 +731,39 @@ async function fetchStatus() {
 // Global Upload Handler
 if (globalFileInput) {
   globalFileInput.addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    
+    const files = [...e.target.files];
+    if (files.length === 0) return;
+
+    const uploadCta = document.querySelector('#globalUpload .upload-cta');
+    const originalCta = uploadCta?.textContent || 'Choose files';
+    const failures = [];
+    globalFileInput.disabled = true;
+
     try {
-      const res = await fetch(`/api/upload?filename=${encodeURIComponent(file.name)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/octet-stream' },
-        body: file
-      });
-      if (!res.ok) throw new Error(await res.text());
-    } catch (err) {
-      alert(`Queue error: ${err.message}`);
+      for (let i = 0; i < files.length; i += 1) {
+        const file = files[i];
+        if (uploadCta) uploadCta.textContent = `Uploading ${i + 1}/${files.length}...`;
+
+        try {
+          const res = await fetch(`/api/upload?filename=${encodeURIComponent(file.name)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/octet-stream' },
+            body: file
+          });
+          if (!res.ok) throw new Error(await res.text());
+        } catch (err) {
+          failures.push(`${file.name}: ${err.message}`);
+        }
+      }
     } finally {
+      globalFileInput.disabled = false;
       globalFileInput.value = ''; // clear input
+      if (uploadCta) uploadCta.textContent = originalCta;
       fetchStatus(); // trigger immediate refresh
+    }
+
+    if (failures.length > 0) {
+      alert(`Could not queue ${failures.length} file(s):\n${failures.join('\n')}`);
     }
   });
 }
