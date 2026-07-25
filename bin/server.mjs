@@ -2,7 +2,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { startFarmPolling, setPrinters, getPrinters, farmState, jobQueue, manualOverrides, settings, printerQueues, chooseAutoDispatchJob } from '../lib/farm.mjs';
+import { startFarmPolling, stopFarmPolling, setPrinters, getPrinters, farmState, jobQueue, manualOverrides, settings, printerQueues, chooseAutoDispatchJob, requireBedClearance } from '../lib/farm.mjs';
 import { localSubnets, localSubnet, scanSubnet, normalizeSubnetInput } from '../lib/discovery.mjs';
 import { uploadGcode, startPrint, confirmPrinting, pausePrint, resumePrint, cancelPrint } from '../lib/creality.mjs';
 import { sanitizeFilename, resolveSafePath } from '../lib/server-helpers.mjs';
@@ -31,6 +31,7 @@ if (fs.existsSync(PRINTERS_JSON)) {
     console.error("Failed to parse printers.json", e);
   }
 }
+requireBedClearance(printers);
 
 // Polling is started in the direct execution block below
 
@@ -297,6 +298,10 @@ export const server = http.createServer(async (req, res) => {
       return;
     }
     
+    // Creality's status socket accepts very few simultaneous connections.
+    // Pause the regular sweep so it cannot race the discovery probe.
+    stopFarmPolling();
+
     try {
       const result = await scanSubnet(subnet);
       
@@ -311,6 +316,7 @@ export const server = http.createServer(async (req, res) => {
         
         result.found = assignStablePrinterIds(result.found);
         reconcileDiscoveredPrinters(result.found);
+        requireBedClearance(result.found);
         const newPrinters = result.found.map((p) => ({ id: p.id, ip: p.ip, hostname: p.hostname }));
         setPrinters(newPrinters);
         fs.writeFileSync(PRINTERS_JSON, JSON.stringify(newPrinters, null, 2));
@@ -321,6 +327,8 @@ export const server = http.createServer(async (req, res) => {
     } catch (err) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: err.message }));
+    } finally {
+      startFarmPolling(getPrinters(), 2000);
     }
     return;
   }
