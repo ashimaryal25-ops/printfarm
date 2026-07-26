@@ -7,9 +7,9 @@ import { localSubnets, localSubnet, scanSubnet, normalizeSubnetInput } from '../
 import { uploadGcode, startPrint, confirmPrinting, pausePrint, resumePrint, cancelPrint } from '../lib/creality.mjs';
 import { sanitizeFilename, resolveSafePath } from '../lib/server-helpers.mjs';
 import { isPrinterPausedState, isPrinterPrintingState } from '../lib/printer-state.mjs';
+import { createJobDispatcher } from '../lib/dispatcher.mjs';
 
 export const failedJobs = [];
-export const completedJobs = [];
 export const localAutoPrint = new Map();
 export const activeDispatches = new Map();
 export const controlOperations = new Map();
@@ -85,13 +85,6 @@ export function reconcileDiscoveredPrinters(discoveredPrinters) {
     dispatch.totalLayer = replacement.totalLayer || 0;
     dispatch.seenBusy = true;
     activeDispatches.set(replacement.ip, dispatch);
-
-    for (const job of completedJobs) {
-      if (job.id === dispatch.jobId) {
-        job.printerIp = replacement.ip;
-        job.printerId = replacement.id;
-      }
-    }
 
     if (printerQueues.has(oldIp)) {
       const migratedQueue = printerQueues.get(oldIp);
@@ -226,32 +219,11 @@ function statusPayload() {
     settings,
     manualOverrides: Object.fromEntries(manualOverrides),
     failedJobs,
-    completedJobs,
     printerQueues: Object.fromEntries(printerQueues),
     localAutoPrint: Object.fromEntries(localAutoPrint),
     activeJobs,
     controlWarnings: Object.fromEntries(controlWarnings)
   };
-}
-
-function beginDispatch(state, job, source) {
-  activeDispatches.set(state.ip, {
-    jobId: job.id,
-    filename: job.filename,
-    filePath: job.filePath,
-    attempts: job.attempts,
-    printerIp: state.ip,
-    printerId: state.id,
-    phase: 'uploading',
-    source,
-    startedAt: Date.now(),
-    seenBusy: false
-  });
-}
-
-function setDispatchPhase(ip, phase) {
-  const dispatch = activeDispatches.get(ip);
-  if (dispatch) dispatch.phase = phase;
 }
 
 export const server = http.createServer(async (req, res) => {
@@ -349,22 +321,15 @@ export const server = http.createServer(async (req, res) => {
     }
     
     let job = null;
-    let sourceArray = null;
-    let idx = failedJobs.findIndex(j => j.id === jobId);
+    const sourceArray = failedJobs;
+    const idx = failedJobs.findIndex(j => j.id === jobId);
     if (idx !== -1) {
       job = failedJobs[idx];
-      sourceArray = failedJobs;
-    } else {
-      idx = completedJobs.findIndex(j => j.id === jobId);
-      if (idx !== -1) {
-        job = completedJobs[idx];
-        sourceArray = completedJobs;
-      }
     }
     
     if (!job) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Job not found in failed or completed lists' }));
+      res.end(JSON.stringify({ error: 'Job not found in failed jobs' }));
       return;
     }
     
@@ -390,7 +355,6 @@ export const server = http.createServer(async (req, res) => {
     delete newJob.failureMessage;
     delete newJob.failureReason;
     delete newJob.failedAt;
-    delete newJob.completedAt;
     delete newJob.lastPrinterIp;
     delete newJob.printerIp;
     delete newJob.printerId;
@@ -524,77 +488,7 @@ export const server = http.createServer(async (req, res) => {
       return;
     }
     
-    console.log(`[API] Manually starting ${job.filename} on printer ${ip}...`);
-    dispatchingPrinters.add(ip);
-    job.status = 'sending';
-    beginDispatch(state, job, 'manual');
-    
-    (async () => {
-      try {
-        const remoteFilename = await uploadGcode(ip, job.filePath);
-        const dispatch = activeDispatches.get(ip);
-        if (dispatch) dispatch.remoteFilename = remoteFilename;
-        setDispatchPhase(ip, 'starting');
-        await startPrint(ip, remoteFilename);
-        setDispatchPhase(ip, 'confirming');
-        const confirmed = await confirmPrinting(ip, remoteFilename);
-        // On success or unconfirmed start (which is a hard fail), remove from localQ
-        const finalIndex = localQ.findIndex(j => j.id === job.id);
-        if (finalIndex !== -1) localQ.splice(finalIndex, 1);
-
-        if (confirmed) {
-          setDispatchPhase(ip, 'preparing');
-          console.log(`[Dispatcher] Successfully started ${remoteFilename} on ${ip}`);
-          const completedJob = {
-            ...job,
-            completedAt: Date.now(),
-            printerIp: ip,
-            printerId: state.id,
-            source: 'manual'
-          };
-          delete completedJob.status;
-          completedJobs.push(completedJob);
-        } else {
-          console.warn(`[Dispatcher] sent but UNCONFIRMED - requeued ${remoteFilename} for ${ip}`);
-          throw new Error('Unconfirmed start');
-        }
-      } catch (err) {
-        activeDispatches.delete(ip);
-        if (err.message === 'Unconfirmed start') {
-          console.error(`[Dispatcher] Unconfirmed start for ${ip} - moving directly to failedJobs.`);
-          const failedJob = {
-            ...job,
-            failureReason: "unconfirmed_start",
-            failureMessage: "Start command was sent but firmware did not confirm the active file. Check printer before requeueing.",
-            lastPrinterIp: ip,
-            failedAt: Date.now()
-          };
-          delete failedJob.status;
-          failedJobs.push(failedJob);
-        } else {
-          console.error(`[Dispatcher] Failed manual start to ${ip}:`, err.message);
-          job.attempts = (job.attempts || 0) + 1;
-          if (job.attempts >= 3) {
-            console.error(`[Dispatcher] Job ${job.filename} reached 3 failures, moving to failedJobs.`);
-            const finalIndex = localQ.findIndex(j => j.id === job.id);
-            if (finalIndex !== -1) localQ.splice(finalIndex, 1);
-            const failedJob = {
-              ...job,
-              failureMessage: err.message,
-              lastPrinterIp: ip,
-              failedAt: Date.now()
-            };
-            delete failedJob.status;
-            failedJobs.push(failedJob);
-          } else {
-            // It stays in localQ, just clear the sending status
-            delete job.status;
-          }
-        }
-      } finally {
-        dispatchingPrinters.delete(ip);
-      }
-    })();
+    void jobDispatcher.dispatch({ state, job, queue: localQ, source: 'manual' });
     
     res.writeHead(200);
     res.end('Started');
@@ -678,7 +572,6 @@ export const server = http.createServer(async (req, res) => {
     try {
       await cancelPrint(ip);
       
-      const dispatch = activeDispatches.get(ip);
       activeDispatches.delete(ip);
       manualOverrides.set(ip, 'needs_clearing');
       if (state) state.farmState = 'needs_clearing';
@@ -787,6 +680,14 @@ export const server = http.createServer(async (req, res) => {
 
 // Dispatcher Loop: Matches queued jobs to free printers
 const dispatchingPrinters = new Set();
+const jobDispatcher = createJobDispatcher({
+  uploadGcode,
+  startPrint,
+  confirmPrinting,
+  activeDispatches,
+  failedJobs,
+  dispatchingPrinters
+});
 
 let dispatcherInterval = null;
 
@@ -794,7 +695,7 @@ export function startDispatcher() {
   if (dispatcherInterval) return;
   dispatcherInterval = setInterval(async () => {
   reconcileActiveDispatches();
-  for (const [id, state] of farmState.entries()) {
+  for (const state of farmState.values()) {
     if (state.farmState === 'free' 
         && !dispatchingPrinters.has(state.ip) 
         && !activeDispatches.has(state.ip) 
@@ -813,76 +714,12 @@ export function startDispatcher() {
       
       if (!job) continue; // No jobs available for auto-assign
 
-      job.status = 'sending';
-      
-      console.log(`[Dispatcher] Starting ${job.filename} on printer ${state.ip}...`);
-      dispatchingPrinters.add(state.ip);
-      beginDispatch(state, job, selection.source);
-      
-      try {
-        const remoteFilename = await uploadGcode(state.ip, job.filePath);
-        const dispatch = activeDispatches.get(state.ip);
-        if (dispatch) dispatch.remoteFilename = remoteFilename;
-        setDispatchPhase(state.ip, 'starting');
-        await startPrint(state.ip, remoteFilename);
-        setDispatchPhase(state.ip, 'confirming');
-        const confirmed = await confirmPrinting(state.ip, remoteFilename);
-        // On success or unconfirmed start (which is a hard fail), remove from source array
-        const finalIndex = queueSource.findIndex(j => j.id === job.id);
-        if (finalIndex !== -1) queueSource.splice(finalIndex, 1);
-
-        if (confirmed) {
-          setDispatchPhase(state.ip, 'preparing');
-          console.log(`[Dispatcher] Successfully started ${remoteFilename} on ${state.ip}`);
-          const completedJob = {
-            ...job,
-            completedAt: Date.now(),
-            printerIp: state.ip,
-            printerId: state.id,
-            source: selection.source
-          };
-          delete completedJob.status;
-          completedJobs.push(completedJob);
-        } else {
-          console.warn(`[Dispatcher] sent but UNCONFIRMED - requeued ${remoteFilename} for ${state.ip}`);
-          throw new Error('Unconfirmed start');
-        }
-      } catch (err) {
-        activeDispatches.delete(state.ip);
-        if (err.message === 'Unconfirmed start') {
-          console.error(`[Dispatcher] Unconfirmed start for ${state.ip} - moving directly to failedJobs.`);
-          const failedJob = {
-            ...job,
-            failureReason: "unconfirmed_start",
-            failureMessage: "Start command was sent but firmware did not confirm the active file. Check printer before requeueing.",
-            lastPrinterIp: state.ip,
-            failedAt: Date.now()
-          };
-          delete failedJob.status;
-          failedJobs.push(failedJob);
-        } else {
-          console.error(`[Dispatcher] Failed to start on ${state.ip}:`, err.message);
-          job.attempts = (job.attempts || 0) + 1;
-          if (job.attempts >= 3) {
-            console.error(`[Dispatcher] Job ${job.filename} reached 3 failures, moving to failedJobs.`);
-            const finalIndex = queueSource.findIndex(j => j.id === job.id);
-            if (finalIndex !== -1) queueSource.splice(finalIndex, 1);
-            const failedJob = {
-              ...job,
-              failureMessage: err.message,
-              lastPrinterIp: state.ip,
-              failedAt: Date.now()
-            };
-            delete failedJob.status;
-            failedJobs.push(failedJob);
-          } else {
-            // It stays in queue, just clear the sending status
-            delete job.status;
-          }
-        }
-      } finally {
-        dispatchingPrinters.delete(state.ip);
-      }
+      await jobDispatcher.dispatch({
+        state,
+        job,
+        queue: queueSource,
+        source: selection.source
+      });
     }
   }
   }, 3000);

@@ -7,7 +7,6 @@ process.env.HTTP_PORT = '9999';
 
 const {
   activeDispatches,
-  completedJobs,
   controlOperations,
   controlWarnings,
   failedJobs,
@@ -142,7 +141,6 @@ try {
   controlOperations.clear();
   controlWarnings.clear();
   localAutoPrint.clear();
-  completedJobs.length = 0;
   failedJobs.length = 0;
 
   for (const file of fs.readdirSync('scratch')) {
