@@ -18,7 +18,7 @@
       <span class="summary-item status-free">Free: <b id="sum-free">0</b></span>
       <span class="summary-item status-printing">Busy: <b id="sum-busy">0</b></span>
       <span class="summary-item status-heating">Needs Clearing: <b id="sum-clear">0</b></span>
-      <span class="summary-item" style="color: var(--color-secondary);">Offline: <b id="sum-offline">0</b></span>
+      <span class="summary-item">Offline: <b id="sum-offline">0</b></span>
       <span class="summary-item status-error">Error: <b id="sum-error">0</b></span>
     </div>
   </header>
@@ -39,20 +39,20 @@
         </div>
         <div class="discovery-section">
           <h3>Network Discovery</h3>
-          <div class="discovery-mode-selector" style="display: flex; gap: 8px; margin-bottom: 8px; font-size: 11px;">
+          <div class="discovery-mode-selector">
             <label><input type="radio" name="discoveryMode" value="auto" checked> Auto</label>
             <label><input type="radio" name="discoveryMode" value="home"> Home/Router</label>
             <label><input type="radio" name="discoveryMode" value="hotspot"> Hotspot</label>
           </div>
-          <div id="discoveryDescription" style="font-size: 10px; color: var(--color-secondary); margin-bottom: 8px;">
+          <div id="discoveryDescription" class="discovery-description">
             Auto-detects your local private network.
           </div>
-          <button id="tryHotspotBtn" class="action-btn" style="padding: 2px 6px; font-size: 10px; margin-bottom: 8px; display: none;">Try Windows Hotspot</button>
-          <div class="discovery-controls" style="display: flex; gap: 8px;">
-            <input type="text" id="subnetInput" placeholder="192.168.1 or printer IP" class="action-input" style="display: none; flex: 2;">
-            <button id="scanBtn" class="action-btn assign-btn discovery-scan-btn" style="flex: 1;">DISCOVER</button>
+          <button id="tryHotspotBtn" class="action-btn hotspot-button">Try Windows Hotspot</button>
+          <div class="discovery-controls">
+            <input type="text" id="subnetInput" placeholder="192.168.1 or printer IP" class="action-input subnet-input">
+            <button id="scanBtn" class="action-btn assign-btn discovery-scan-btn">DISCOVER</button>
           </div>
-          <div id="scanStatus" class="discovery-status" style="margin-top: 8px;"></div>
+          <div id="scanStatus" class="discovery-status"></div>
         </div>
         
         <div class="queue-list-container">
@@ -72,11 +72,11 @@
           </ul>
         </div>
 
-        <div class="queue-list-container" id="failedJobsContainer" style="display: none; border-color: rgba(239, 68, 68, 0.3);">
-          <div class="queue-header" style="border-bottom-color: rgba(239, 68, 68, 0.3);">
-            <h3 style="color: var(--color-status-error);">Failed Jobs (<span id="failedCount">0</span>)</h3>
+        <div class="queue-list-container failed-jobs-container" id="failedJobsContainer" hidden>
+          <div class="queue-header failed-jobs-header">
+            <h3>Failed Jobs (<span id="failedCount">0</span>)</h3>
           </div>
-          <ul id="failedList" class="queue-list failed-list" style="height: auto; max-height: 150px;">
+          <ul id="failedList" class="queue-list failed-list">
             <!-- Failed items injected here -->
           </ul>
         </div>
@@ -99,9 +99,9 @@
         <!-- Printer cards will be injected here by app.js -->
       </div>
 
-      <div id="farm-empty-state" style="display: none; padding: 32px; text-align: center; color: var(--color-secondary); border: 1px dashed var(--color-border, #444); border-radius: 8px; margin-top: 8px;">
-        <p style="margin-bottom: 8px; font-weight: 600;">No printers yet</p>
-        <p style="font-size: 12px; line-height: 1.6;">
+      <div id="farm-empty-state" class="farm-empty-state">
+        <p class="farm-empty-title">No printers yet</p>
+        <p class="farm-empty-copy">
           Use <strong>DISCOVER</strong> in the sidebar to scan your network for printers.<br>
           No printer? Run the simulator: <code>node bin/mock-printer.mjs</code>, add
           <code>{ "id": "1", "ip": "127.0.0.1" }</code> to <code>printers.json</code>, and restart.
@@ -118,7 +118,7 @@
           <h3 class="printer-name">Printer</h3>
           <span class="printer-ip">0.0.0.0</span>
         </div>
-        <div style="display: flex; gap: 8px; align-items: center;">
+        <div class="card-header-status">
           <span class="status-badge">FREE</span>
         </div>
       </div>
@@ -134,11 +134,11 @@
         </div>
       </div>
       
-      <div class="offline-message" style="display: none; font-size: 10px; color: var(--color-secondary); padding: 8px; text-align: center; font-style: italic;">
+      <div class="offline-message">
         Printer not responding. Check power, hotspot/router connection, or open the printer IP in a browser.
       </div>
 
-      <div class="progress-section" style="display: none;">
+      <div class="progress-section initially-hidden">
         <div class="progress-container">
           <div class="progress-fill"></div>
         </div>
@@ -147,7 +147,7 @@
       
       <div class="printer-actions-section">
         <!-- 1. Select from global queue -->
-        <div class="manual-assign-section action-row" style="display: none;">
+        <div class="manual-assign-section action-row initially-hidden">
           <select class="job-select action-input" title="Select Job">
             <option value="">Select a file from queue...</option>
           </select>
@@ -164,7 +164,7 @@
               <line x1="12" y1="3" x2="12" y2="15"></line>
             </svg>
             UPLOAD
-            <input type="file" accept=".gcode" class="local-file-input" style="display: none;">
+            <input type="file" accept=".gcode" class="local-file-input">
           </label>
         </div>
       </div>
@@ -183,12 +183,12 @@
         <ul class="local-queue-list"></ul>
       </div>
 
-      <button class="clear-bed-btn" style="display: none;">Mark Bed Cleared</button>
+      <button class="clear-bed-btn initially-hidden">Mark Bed Cleared</button>
       
-      <div class="raw-debug-view" style="display: none; white-space: pre-wrap; font-family: monospace; font-size: 10px; color: var(--color-secondary); margin-top: 16px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px; overflow-x: auto;"></div>
+      <div class="raw-debug-view"></div>
     </div>
   </template>
 
-  <script src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>

@@ -24,18 +24,14 @@
 
   /* Typography */
   --font-h1: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --font-h2: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-body: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-data: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   
   --text-h1: 1.5rem;
-  --text-h2: 1.125rem;
   --text-body: 0.9rem;
   --text-label: 0.75rem;
   
   --font-weight-h1: 600;
-  --font-weight-h2: 500;
-  --font-weight-label: 500;
   
   /* Structure */
   --radius-sm: 4px;
@@ -44,7 +40,6 @@
   --radius-full: 9999px;
   
   /* Shadows - Subtle */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
   
   /* Spacing */

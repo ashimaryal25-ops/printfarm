@@ -1,5 +1,11 @@
+import {
+  renderActiveJobs,
+  renderFailedJobs,
+  renderFarmSummary,
+  renderGlobalQueue
+} from './dashboard-renderers.js';
+
 const grid = document.getElementById('printer-grid');
-const template = document.getElementById('printer-card-template');
 const autoAssignCheck = document.getElementById('autoAssignCheck');
 const rawDebugCheck = document.getElementById('rawDebugCheck');
 const globalFileInput = document.getElementById('globalFileInput');
@@ -35,18 +41,12 @@ function showCardMessage(card, type, message) {
   if (!msgBox) {
     msgBox = document.createElement('div');
     msgBox.className = 'card-message';
-    msgBox.style.fontSize = '10px';
-    msgBox.style.padding = '4px 8px';
-    msgBox.style.marginTop = '8px';
-    msgBox.style.borderRadius = '4px';
     const actionsSection = card.querySelector('.printer-actions-section');
     if (actionsSection) actionsSection.appendChild(msgBox);
   }
   msgBox.textContent = message;
-  msgBox.style.backgroundColor = type === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)';
-  msgBox.style.color = type === 'error' ? 'var(--color-status-error)' : 'var(--color-status-free)';
-  msgBox.style.display = 'block';
-  setTimeout(() => { if (msgBox) msgBox.style.display = 'none'; }, 4000);
+  msgBox.className = `card-message ${type} visible`;
+  setTimeout(() => msgBox.classList.remove('visible'), 4000);
 }
 
 async function executeControl(ip, action, btn) {
@@ -83,7 +83,7 @@ async function executeControl(ip, action, btn) {
       row.appendChild(errDiv);
     }
     errDiv.textContent = `Error: ${err.message}`;
-    errDiv.style.display = 'block';
+    errDiv.classList.add('visible');
     
     // Restore buttons
     if (row) {
@@ -93,121 +93,6 @@ async function executeControl(ip, action, btn) {
   }
 }
 
-function renderActiveJobs(activeJobs = [], controlWarnings = {}) {
-  const list = document.getElementById('activeJobsList');
-  const count = document.getElementById('activeJobsCount');
-  if (!list || !count) return;
-
-  list.replaceChildren();
-  count.textContent = `${activeJobs.length} active`;
-
-  if (activeJobs.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'active-job-empty';
-    empty.textContent = 'No jobs are currently active.';
-    list.appendChild(empty);
-    return;
-  }
-
-  const phaseLabels = {
-    uploading: 'Uploading',
-    starting: 'Starting',
-    confirming: 'Confirming start',
-    preparing: 'Preparing',
-    printing: 'Printing',
-    paused: 'Paused',
-    pausing: 'Pausing...',
-    resuming: 'Resuming...',
-    canceling: 'Canceling...'
-  };
-
-  activeJobs.forEach(job => {
-    const row = document.createElement('div');
-    row.className = 'active-job-row';
-
-    const infoDiv = document.createElement('div');
-    infoDiv.className = 'active-job-info';
-
-    const printer = document.createElement('div');
-    printer.className = 'active-job-printer';
-    const printerName = document.createElement('strong');
-    printerName.textContent = job.printerId ? `Printer ${job.printerId}` : 'Printer';
-    const printerIp = document.createElement('span');
-    printerIp.textContent = job.printerIp || '';
-    printer.append(printerName, printerIp);
-
-    const filename = document.createElement('div');
-    filename.className = 'active-job-filename';
-    filename.textContent = job.filename || 'Unknown file';
-    filename.title = filename.textContent;
-
-    const state = document.createElement('div');
-    state.className = `active-job-state ${job.phase || 'printing'}`;
-    const phase = phaseLabels[job.phase] || 'Printing';
-    const progress = Number.isFinite(Number(job.progress))
-      ? Math.max(0, Math.min(100, Number(job.progress)))
-      : null;
-    if (progress !== null && (job.phase === 'printing' || job.phase === 'paused')) {
-      const layer = Number(job.layer) || 0;
-      const totalLayer = Number(job.totalLayer) || 0;
-      const layerText = totalLayer > 0 ? ` · Layer ${layer}/${totalLayer}` : '';
-      state.textContent = `${phase} ${progress}%${layerText}`;
-    } else {
-      state.textContent = phase;
-    }
-
-    infoDiv.append(printer, filename, state);
-    row.appendChild(infoDiv);
-    
-    const controlsDiv = document.createElement('div');
-    controlsDiv.className = 'active-job-controls';
-    
-    const isTransitioning = ['pausing', 'resuming', 'canceling', 'uploading', 'starting', 'confirming'].includes(job.phase);
-    const showControls = !['uploading', 'starting', 'confirming'].includes(job.phase);
-    
-    if (showControls) {
-      if (job.phase === 'paused' || job.phase === 'resuming') {
-        const resumeBtn = document.createElement('button');
-        resumeBtn.className = 'control-btn resume-btn';
-        resumeBtn.textContent = 'Resume';
-        resumeBtn.disabled = isTransitioning;
-        if (!isTransitioning) resumeBtn.addEventListener('click', () => executeControl(job.printerIp, 'resume', resumeBtn));
-        controlsDiv.appendChild(resumeBtn);
-      } else if (job.phase !== 'preparing') {
-        const pauseBtn = document.createElement('button');
-        pauseBtn.className = 'control-btn pause-btn';
-        pauseBtn.textContent = 'Pause';
-        pauseBtn.disabled = isTransitioning;
-        if (!isTransitioning) pauseBtn.addEventListener('click', () => executeControl(job.printerIp, 'pause', pauseBtn));
-        controlsDiv.appendChild(pauseBtn);
-      }
-      
-      const cancelBtn = document.createElement('button');
-      cancelBtn.className = 'control-btn cancel-btn';
-      cancelBtn.textContent = 'Cancel Print';
-      cancelBtn.disabled = isTransitioning;
-      if (!isTransitioning) cancelBtn.addEventListener('click', () => executeControl(job.printerIp, 'cancel', cancelBtn));
-      controlsDiv.appendChild(cancelBtn);
-    }
-    
-    row.appendChild(controlsDiv);
-    
-    // Check for warnings
-    const warning = controlWarnings[job.printerIp];
-    if (warning) {
-      let warnDiv = document.createElement('div');
-      warnDiv.className = 'active-job-error';
-      warnDiv.textContent = warning;
-      warnDiv.style.display = 'block';
-      row.appendChild(warnDiv);
-    }
-    
-    list.appendChild(row);
-  });
-}
-
-
-let lastState = null;
 let currentSettings = { autoAssign: false };
 
 // Store card elements to update them efficiently
@@ -231,98 +116,16 @@ async function fetchStatus() {
   try {
     const res = await fetch('/api/status');
     const data = await res.json();
-    lastState = data;
     currentSettings = data.settings || currentSettings;
-    renderActiveJobs(data.activeJobs || [], data.controlWarnings || {});
+    renderActiveJobs(data.activeJobs || [], data.controlWarnings || {}, (ip, action, button) => executeControl(ip, action, button));
     
     // Sync toggle if changed externally
     if (autoAssignCheck && autoAssignCheck.checked !== currentSettings.autoAssign) {
       autoAssignCheck.checked = currentSettings.autoAssign;
     }
 
-    // Update Queue
-    const queueCount = document.getElementById('queueCount');
-    const queueList = document.getElementById('queueList');
-    if (queueCount && queueList) {
-      queueCount.textContent = data.jobQueue.length;
-      queueList.innerHTML = '';
-      if (data.jobQueue.length === 0) {
-        const li = document.createElement('li');
-        const span = document.createElement('span');
-        span.textContent = 'No queued jobs';
-        span.style.color = 'var(--color-secondary)';
-        span.style.fontStyle = 'italic';
-        li.appendChild(span);
-        queueList.appendChild(li);
-      } else {
-        data.jobQueue.forEach((job, idx) => {
-          const li = document.createElement('li');
-          li.textContent = `${idx + 1}. ${job.filename}${job.status === 'sending' ? ' - sending' : ''}`;
-          li.title = job.filename;
-          queueList.appendChild(li);
-        });
-      }
-    }
-
-    // Update Failed Jobs
-    const failedJobsContainer = document.getElementById('failedJobsContainer');
-    const failedCount = document.getElementById('failedCount');
-    const failedList = document.getElementById('failedList');
-    if (failedJobsContainer && failedCount && failedList && data.failedJobs) {
-      if (data.failedJobs.length > 0) {
-        failedJobsContainer.style.display = 'block';
-        failedCount.textContent = data.failedJobs.length;
-        failedList.innerHTML = '';
-        data.failedJobs.forEach((job, idx) => {
-          const li = document.createElement('li');
-          const textContainer = document.createElement('div');
-          textContainer.style.display = 'flex';
-          textContainer.style.flexDirection = 'column';
-          textContainer.style.gap = '2px';
-          
-          const nameSpan = document.createElement('span');
-          const attempts = Number(job.attempts);
-          const failureLabel = job.failureReason === 'unconfirmed_start'
-            ? 'Start unconfirmed'
-            : (Number.isFinite(attempts) && attempts > 0 ? `Failed ${attempts}x` : 'Failed');
-          nameSpan.textContent = `${idx + 1}. ${job.filename} (${failureLabel})`;
-          nameSpan.title = job.failureMessage || job.filename;
-          textContainer.appendChild(nameSpan);
-          
-          if (job.failureMessage) {
-            const msgSpan = document.createElement('span');
-            msgSpan.textContent = job.failureMessage;
-            msgSpan.style.fontSize = '9px';
-            msgSpan.style.opacity = '0.7';
-            textContainer.appendChild(msgSpan);
-          }
-          
-          const controlsDiv = document.createElement('div');
-          if (job.status === 'sending') {
-            const span = document.createElement('span');
-            span.style.fontSize = '10px';
-            span.style.color = 'var(--color-accent)';
-            span.textContent = 'SENDING...';
-            controlsDiv.appendChild(span);
-          } else {
-            if (job.filePath) {
-              const requeueBtn = document.createElement('button');
-              requeueBtn.className = 'requeue-btn';
-              requeueBtn.textContent = 'REQUEUE';
-              requeueBtn.title = 'Send back to active Queue';
-              requeueBtn.addEventListener('click', () => requeueJob(job.id, requeueBtn, 'REQUEUE'));
-              controlsDiv.appendChild(requeueBtn);
-            }
-          }
-          
-          li.appendChild(textContainer);
-          li.appendChild(controlsDiv);
-          failedList.appendChild(li);
-        });
-      } else {
-        failedJobsContainer.style.display = 'none';
-      }
-    }
+    renderGlobalQueue(data.jobQueue || []);
+    renderFailedJobs(data.failedJobs || [], (jobId, button) => requeueJob(jobId, button, 'REQUEUE'));
 
     let sumTotal = 0, sumFree = 0, sumBusy = 0, sumClear = 0, sumError = 0, sumOffline = 0;
 
@@ -608,11 +411,8 @@ async function fetchStatus() {
       
       if (localQ.length === 0) {
         const li = document.createElement('li');
-        li.className = 'local-job-item';
+        li.className = 'local-job-item empty-list-item';
         const span = document.createElement('span');
-        span.style.color = 'var(--color-secondary)';
-        span.style.fontStyle = 'italic';
-        span.style.fontSize = '10px';
         span.textContent = 'No printer-local jobs';
         li.appendChild(span);
         localQueueList.appendChild(li);
@@ -705,24 +505,14 @@ async function fetchStatus() {
       emptyState.style.display = Object.keys(data.farmState).length === 0 ? 'block' : 'none';
     }
 
-    // Update Summary Row DOM
-    const sumTotalEl = document.getElementById('sum-total');
-    if (sumTotalEl) sumTotalEl.textContent = sumTotal;
-    
-    const sumFreeEl = document.getElementById('sum-free');
-    if (sumFreeEl) sumFreeEl.textContent = sumFree;
-    
-    const sumBusyEl = document.getElementById('sum-busy');
-    if (sumBusyEl) sumBusyEl.textContent = sumBusy;
-    
-    const sumClearEl = document.getElementById('sum-clear');
-    if (sumClearEl) sumClearEl.textContent = sumClear;
-    
-    const sumOfflineEl = document.getElementById('sum-offline');
-    if (sumOfflineEl) sumOfflineEl.textContent = sumOffline;
-    
-    const sumErrorEl = document.getElementById('sum-error');
-    if (sumErrorEl) sumErrorEl.textContent = sumError;
+    renderFarmSummary({
+      total: sumTotal,
+      free: sumFree,
+      busy: sumBusy,
+      clear: sumClear,
+      offline: sumOffline,
+      error: sumError
+    });
   } catch (err) {
     console.error('Failed to fetch status', err);
   }

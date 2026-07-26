@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node bin/server.mjs",
     "status": "node bin/farm-status.mjs",
-    "check": "node --check bin/server.mjs && node --check bin/mock-printer.mjs && node --check lib/creality.mjs && node --check lib/discovery.mjs && node --check lib/farm.mjs && node --check lib/probe.mjs && node --check public/app.js",
+    "check": "node --check bin/server.mjs && node --check bin/mock-printer.mjs && node --check lib/creality.mjs && node --check lib/discovery.mjs && node --check lib/dispatcher.mjs && node --check lib/farm.mjs && node --check lib/http-helpers.mjs && node --check lib/printer-identity.mjs && node --check lib/probe.mjs && node --check lib/workflow-state.mjs && node --check public/app.js && node --check public/dashboard-renderers.js",
     "test": "node --test test/**/*.test.mjs",
     "test:integration": "node test/integration.mjs",
     "verify": "npm run check && npm test && npm run test:integration"
