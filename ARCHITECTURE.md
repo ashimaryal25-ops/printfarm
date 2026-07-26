@@ -4,13 +4,15 @@ PrinterFarm is a zero-runtime-dependency Node.js application with four boundarie
 
 ## Dashboard
 
-`public/` contains the vanilla HTML, CSS, and browser JavaScript. The browser polls `/api/status`, renders the current farm snapshot, and sends explicit commands to the backend. It never connects to printer control sockets directly.
+`public/` contains the vanilla HTML, CSS, and browser JavaScript. The browser polls `/api/status`, delegates queue and active-job rendering to focused modules, and sends explicit commands to the backend. It never connects to printer control sockets directly.
 
 ## Server and dispatcher
 
-`bin/server.mjs` serves the dashboard and owns API-level workflow state: uploads, global and local queues, active dispatches, command locks, and operator overrides. Its dispatcher only selects a printer when all safety gates agree that it is free.
+`bin/server.mjs` serves the dashboard and coordinates API workflows. Session-scoped workflow state, printer identity reconciliation, HTTP helpers, and the shared dispatch lifecycle live in focused `lib/` modules. The dispatcher only selects a printer when all safety gates agree that it is free.
 
 Global and printer-local Auto-Print share one selection function. A printer reserved for local Auto-Print is excluded from the global pool, even when its local queue is empty.
+
+Print history is intentionally deferred. Active jobs come from live dispatch tracking or printer telemetry, and a terminal printer state transitions directly to `NEEDS CLEARING` without creating a misleading completed-job record.
 
 ## Printer protocol
 

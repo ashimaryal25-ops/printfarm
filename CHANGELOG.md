@@ -4,6 +4,9 @@
 
 - Fixed split or coalesced mock WebSocket frames during concurrent polling and controls.
 - Prevented incomplete telemetry windows from making a printer appear free or triggering a false bed-clearing transition.
+- Centralized manual and automatic job dispatch behind one tested lifecycle.
+- Separated workflow state, printer identity, HTTP helpers, and dashboard rendering into focused modules.
+- Removed the unused started-as-completed job collection; accurate print history remains planned.
 
 ## 1.0.0 - 2026-07-17
 
