@@ -1,5 +1,7 @@
 # PrinterFarm
 
+![PrinterFarm dispatching four queued jobs to a farm of stock Ender 3 V3 KE printers, ending with the printer's own screen showing the uploaded file](docs/demo.gif)
+
 PrinterFarm is a local dashboard for discovering, monitoring, and routing G-code jobs across stock networked Creality printers.
 
 It uses the printers' existing LAN interfaces. No root access, custom firmware, per-printer Raspberry Pi, Moonraker, or cloud account is required.
