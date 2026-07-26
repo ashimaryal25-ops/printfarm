@@ -8,12 +8,24 @@ import { uploadGcode, startPrint, confirmPrinting, pausePrint, resumePrint, canc
 import { sanitizeFilename, resolveSafePath } from '../lib/server-helpers.mjs';
 import { isPrinterPausedState, isPrinterPrintingState } from '../lib/printer-state.mjs';
 import { createJobDispatcher } from '../lib/dispatcher.mjs';
+import { assignStablePrinterIds as assignIds, dispatchMatchesState, reconcilePrinterAddresses } from '../lib/printer-identity.mjs';
+import { matchesRoute, sendJson, sendText } from '../lib/http-helpers.mjs';
+import {
+  activeDispatches,
+  controlOperations,
+  controlWarnings,
+  dispatchingPrinters,
+  failedJobs,
+  localAutoPrint
+} from '../lib/workflow-state.mjs';
 
-export const failedJobs = [];
-export const localAutoPrint = new Map();
-export const activeDispatches = new Map();
-export const controlOperations = new Map();
-export const controlWarnings = new Map();
+export {
+  activeDispatches,
+  controlOperations,
+  controlWarnings,
+  failedJobs,
+  localAutoPrint
+} from '../lib/workflow-state.mjs';
 
 const PUBLIC_DIR = path.join(process.cwd(), 'public');
 const SCRATCH_DIR = path.join(process.cwd(), 'scratch');
@@ -38,81 +50,19 @@ function getStateByIp(ip) {
   return [...farmState.values()].find(state => state.ip === ip);
 }
 
-function sameFilename(left, right) {
-  const leftName = path.basename(String(left || '')).toLowerCase();
-  const rightName = path.basename(String(right || '')).toLowerCase();
-  return Boolean(leftName && rightName && leftName === rightName);
-}
-
-function dispatchMatchesState(dispatch, state) {
-  return [dispatch.remoteFilename, dispatch.filePath, dispatch.filename]
-    .some(filename => sameFilename(state?.printFileName, filename));
-}
-
-function moveMapKey(map, oldIp, newIp) {
-  if (!map.has(oldIp)) return;
-  const value = map.get(oldIp);
-  map.delete(oldIp);
-  map.set(newIp, value);
-}
-
 export function reconcileDiscoveredPrinters(discoveredPrinters) {
-  const discoveredIps = new Set(discoveredPrinters.map(printer => printer.ip));
-
-  for (const [oldIp, dispatch] of [...activeDispatches]) {
-    if (discoveredIps.has(oldIp)) continue;
-
-    const matches = discoveredPrinters.filter(printer =>
-      (printer.farmState === 'busy' || printer.farmState === 'paused')
-      && dispatchMatchesState(dispatch, printer)
-    );
-
-    activeDispatches.delete(oldIp);
-    if (matches.length !== 1) {
-      controlOperations.delete(oldIp);
-      controlWarnings.delete(oldIp);
-      continue;
-    }
-
-    const replacement = matches[0];
-    dispatch.printerIp = replacement.ip;
-    dispatch.printerId = replacement.id;
-    dispatch.hostname = replacement.hostname;
-    dispatch.remoteFilename = replacement.printFileName;
-    dispatch.phase = replacement.farmState === 'paused' ? 'paused' : 'printing';
-    dispatch.progress = replacement.printProgress || 0;
-    dispatch.layer = replacement.layer || 0;
-    dispatch.totalLayer = replacement.totalLayer || 0;
-    dispatch.seenBusy = true;
-    activeDispatches.set(replacement.ip, dispatch);
-
-    if (printerQueues.has(oldIp)) {
-      const migratedQueue = printerQueues.get(oldIp);
-      printerQueues.delete(oldIp);
-      printerQueues.set(replacement.ip, migratedQueue);
-    }
-    moveMapKey(localAutoPrint, oldIp, replacement.ip);
-    moveMapKey(manualOverrides, oldIp, replacement.ip);
-    moveMapKey(controlWarnings, oldIp, replacement.ip);
-  }
+  reconcilePrinterAddresses(discoveredPrinters, {
+    activeDispatches,
+    controlOperations,
+    controlWarnings,
+    localAutoPrint,
+    manualOverrides,
+    printerQueues
+  });
 }
 
 function assignStablePrinterIds(foundPrinters) {
-  const priorByHostname = new Map(
-    getPrinters().filter(printer => printer.hostname).map(printer => [printer.hostname, printer.id])
-  );
-  const usedIds = new Set();
-
-  return foundPrinters.map(printer => {
-    let id = priorByHostname.get(printer.hostname);
-    if (!id || usedIds.has(id)) {
-      let candidate = 1;
-      while (usedIds.has(String(candidate))) candidate += 1;
-      id = String(candidate);
-    }
-    usedIds.add(id);
-    return { ...printer, id };
-  });
+  return assignIds(foundPrinters, getPrinters());
 }
 
 export function isPrinterPreparing(state) {
@@ -226,37 +176,53 @@ function statusPayload() {
   };
 }
 
+async function runPrinterControl({ res, ip, operation, command, onConfirmed }) {
+  const transition = { pause: 'pausing', resume: 'resuming', cancel: 'canceling' }[operation];
+  controlOperations.set(ip, transition);
+  controlWarnings.delete(ip);
+
+  try {
+    await command();
+    onConfirmed?.();
+    sendJson(res, 200, { status: 'ok' });
+  } catch (error) {
+    if (error.message === 'timeout') {
+      const label = operation[0].toUpperCase() + operation.slice(1);
+      const warning = `${label} was sent but the printer did not confirm it. Inspect the printer before trying again.`;
+      controlWarnings.set(ip, warning);
+      sendJson(res, 504, { error: warning });
+    } else {
+      sendJson(res, 502, { error: 'socket_error' });
+    }
+  } finally {
+    controlOperations.delete(ip);
+  }
+}
+
 export const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   
-  if (req.method === 'GET' && url.pathname.startsWith('/api/status')) {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(statusPayload()));
+  if (matchesRoute(req, url, 'GET', '/api/status')) {
+    sendJson(res, 200, statusPayload());
     return;
   }
 
-  if (req.method === 'GET' && url.pathname.startsWith('/api/active-printers')) {
-    import('../lib/farm.mjs').then(module => {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(module.activePrinters));
-    });
+  if (matchesRoute(req, url, 'GET', '/api/active-printers')) {
+    sendJson(res, 200, getPrinters());
     return;
   }
 
-  
-  if (req.method === 'GET' && url.pathname.startsWith('/api/discovery/subnets')) {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(localSubnets()));
+  if (matchesRoute(req, url, 'GET', '/api/discovery/subnets')) {
+    sendJson(res, 200, localSubnets());
     return;
   }
   
-  if (req.method === 'GET' && url.pathname.startsWith('/api/discover')) {
+  if (matchesRoute(req, url, 'GET', '/api/discover')) {
     const subnetParam = url.searchParams.get('subnet');
     
     const rawSubnet = subnetParam || localSubnet();
     if (!rawSubnet) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'could not detect local subnet' }));
+      sendJson(res, 400, { error: 'could not detect local subnet' });
       return;
     }
 
@@ -264,8 +230,7 @@ export const server = http.createServer(async (req, res) => {
     try {
       subnet = normalizeSubnetInput(rawSubnet);
     } catch (err) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err.message }));
+      sendJson(res, 400, { error: err.message });
       return;
     }
     
@@ -288,16 +253,14 @@ export const server = http.createServer(async (req, res) => {
         fs.writeFileSync(PRINTERS_JSON, JSON.stringify(newPrinters, null, 2));
       }
       
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(result));
+      sendJson(res, 200, result);
     } catch (err) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err.message }));
+      sendJson(res, 400, { error: err.message });
     }
     return;
   }
   
-  if (req.method === 'POST' && url.pathname.startsWith('/api/clear-bed')) {
+  if (matchesRoute(req, url, 'POST', '/api/clear-bed')) {
     const ip = url.searchParams.get('ip');
     if (ip) {
       const state = getStateByIp(ip);
@@ -307,16 +270,14 @@ export const server = http.createServer(async (req, res) => {
         activeDispatches.delete(ip);
       }
     }
-    res.writeHead(200);
-    res.end('Cleared');
+    sendText(res, 200, 'Cleared');
     return;
   }
   
-  if (req.method === 'POST' && url.pathname.startsWith('/api/jobs/requeue')) {
+  if (matchesRoute(req, url, 'POST', '/api/jobs/requeue')) {
     const jobId = url.searchParams.get('jobId');
     if (!jobId) {
-      res.writeHead(400);
-      res.end('Missing jobId');
+      sendText(res, 400, 'Missing jobId');
       return;
     }
     
@@ -328,14 +289,12 @@ export const server = http.createServer(async (req, res) => {
     }
     
     if (!job) {
-      res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Job not found in failed jobs' }));
+      sendJson(res, 404, { error: 'Job not found in failed jobs' });
       return;
     }
     
     if (!fs.existsSync(job.filePath)) {
-      res.writeHead(410, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Source file no longer exists on disk' }));
+      sendJson(res, 410, { error: 'Source file no longer exists on disk' });
       return;
     }
     
@@ -361,55 +320,48 @@ export const server = http.createServer(async (req, res) => {
 
     jobQueue.push(newJob);
     
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: true, message: 'Job requeued' }));
+    sendJson(res, 200, { success: true, message: 'Job requeued' });
     return;
   }
   
-  if (req.method === 'POST' && url.pathname.startsWith('/api/settings/auto-assign')) {
+  if (matchesRoute(req, url, 'POST', '/api/settings/auto-assign')) {
     const value = url.searchParams.get('value') === 'true';
     settings.autoAssign = value;
-    res.writeHead(200);
-    res.end('Settings updated');
+    sendText(res, 200, 'Settings updated');
     return;
   }
 
-  if (req.method === 'POST' && url.pathname.startsWith('/api/printers/local-auto-print')) {
+  if (matchesRoute(req, url, 'POST', '/api/printers/local-auto-print')) {
     const ip = url.searchParams.get('ip');
     const value = url.searchParams.get('value') === 'true';
 
     if (!ip) {
-      res.writeHead(400);
-      res.end('Missing ip');
+      sendText(res, 400, 'Missing ip');
       return;
     }
 
     localAutoPrint.set(ip, value);
-    res.writeHead(200);
-    res.end('Local auto-print updated');
+    sendText(res, 200, 'Local auto-print updated');
     return;
   }
   
-  if (req.method === 'POST' && url.pathname.startsWith('/api/printers/queue-job')) {
+  if (matchesRoute(req, url, 'POST', '/api/printers/queue-job')) {
     const ip = url.searchParams.get('ip');
     const jobId = url.searchParams.get('jobId');
     
     if (!ip || !jobId) {
-      res.writeHead(400);
-      res.end('Missing ip or jobId');
+      sendText(res, 400, 'Missing ip or jobId');
       return;
     }
     
     const jobIndex = jobQueue.findIndex(j => j.id === jobId);
     if (jobIndex === -1) {
-      res.writeHead(404);
-      res.end('Job not found in global queue');
+      sendText(res, 404, 'Job not found in global queue');
       return;
     }
 
     if (jobQueue[jobIndex].status === 'sending') {
-      res.writeHead(409);
-      res.end('Job is already being sent to a printer');
+      sendText(res, 409, 'Job is already being sent to a printer');
       return;
     }
     
@@ -417,18 +369,16 @@ export const server = http.createServer(async (req, res) => {
     if (!printerQueues.has(ip)) printerQueues.set(ip, []);
     printerQueues.get(ip).push(job);
     
-    res.writeHead(200);
-    res.end('Job added to local queue');
+    sendText(res, 200, 'Job added to local queue');
     return;
   }
   
-  if (req.method === 'DELETE' && url.pathname.startsWith('/api/printers/queue-job')) {
+  if (matchesRoute(req, url, 'DELETE', '/api/printers/queue-job')) {
     const ip = url.searchParams.get('ip');
     const jobId = url.searchParams.get('jobId');
     
     if (!ip || !jobId) {
-      res.writeHead(400);
-      res.end('Missing ip or jobId');
+      sendText(res, 400, 'Missing ip or jobId');
       return;
     }
     
@@ -436,32 +386,28 @@ export const server = http.createServer(async (req, res) => {
     const jobIndex = localQ.findIndex(j => j.id === jobId);
     
     if (jobIndex === -1) {
-      res.writeHead(404);
-      res.end('Job not found in local queue');
+      sendText(res, 404, 'Job not found in local queue');
       return;
     }
 
     if (localQ[jobIndex].status === 'sending') {
-      res.writeHead(409);
-      res.end('Cannot remove a job while it is being sent');
+      sendText(res, 409, 'Cannot remove a job while it is being sent');
       return;
     }
     
     // Remove it from the local queue
     localQ.splice(jobIndex, 1);
     
-    res.writeHead(200);
-    res.end('Job removed from local queue');
+    sendText(res, 200, 'Job removed from local queue');
     return;
   }
 
-  if (req.method === 'POST' && url.pathname.startsWith('/api/printers/start-job')) {
+  if (matchesRoute(req, url, 'POST', '/api/printers/start-job')) {
     const ip = url.searchParams.get('ip');
     const jobId = url.searchParams.get('jobId');
     
     if (!ip || !jobId) {
-      res.writeHead(400);
-      res.end('Missing ip or jobId');
+      sendText(res, 400, 'Missing ip or jobId');
       return;
     }
     
@@ -469,129 +415,91 @@ export const server = http.createServer(async (req, res) => {
     const jobIndex = localQ.findIndex(j => j.id === jobId);
     
     if (jobIndex === -1) {
-      res.writeHead(404);
-      res.end('Job not found in local queue');
+      sendText(res, 404, 'Job not found in local queue');
       return;
     }
     
     const state = getStateByIp(ip);
     if (!state || state.farmState !== 'free' || dispatchingPrinters.has(ip) || activeDispatches.has(ip)) {
-      res.writeHead(400);
-      res.end('Printer not available');
+      sendText(res, 400, 'Printer not available');
       return;
     }
     
     const job = localQ[jobIndex];
     if (job.status === 'sending') {
-      res.writeHead(400);
-      res.end('Job is already sending');
+      sendText(res, 400, 'Job is already sending');
       return;
     }
     
     void jobDispatcher.dispatch({ state, job, queue: localQ, source: 'manual' });
     
-    res.writeHead(200);
-    res.end('Started');
+    sendText(res, 200, 'Started');
     return;
   }
 
-  if (req.method === 'POST' && url.pathname.startsWith('/api/printers/pause')) {
+  if (matchesRoute(req, url, 'POST', '/api/printers/pause')) {
     const ip = url.searchParams.get('ip');
     const state = getStateByIp(ip);
-    if (!state) { res.writeHead(404); res.end('Printer not found'); return; }
+    if (!state) { sendText(res, 404, 'Printer not found'); return; }
     
-    if (controlOperations.has(ip)) { res.writeHead(409, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Operation already in flight' })); return; }
-    if (!isPrinterPrintingState(state.deviceState, state)) { res.writeHead(400); res.end('Printer is not printing'); return; }
+    if (controlOperations.has(ip)) { sendJson(res, 409, { error: 'Operation already in flight' }); return; }
+    if (!isPrinterPrintingState(state.deviceState, state)) { sendText(res, 400, 'Printer is not printing'); return; }
     if (isPrinterPreparing(state)) {
-      res.writeHead(409, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Printer is still heating or preparing. Pause becomes available when printing begins.' }));
+      sendJson(res, 409, { error: 'Printer is still heating or preparing. Pause becomes available when printing begins.' });
       return;
     }
 
-    controlOperations.set(ip, 'pausing');
-    controlWarnings.delete(ip);
-    
-    try {
-      await pausePrint(ip, state.printFileName);
-      res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ status: 'ok' }));
-    } catch (err) {
-      if (err.message === 'timeout') {
-        const warning = 'Pause was sent but the printer did not confirm it. Inspect the printer before trying again.';
-        controlWarnings.set(ip, warning);
-        res.writeHead(504, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: warning }));
-      } else {
-        res.writeHead(502, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'socket_error' }));
-      }
-    } finally {
-      controlOperations.delete(ip);
-    }
+    await runPrinterControl({
+      res,
+      ip,
+      operation: 'pause',
+      command: () => pausePrint(ip, state.printFileName)
+    });
     return;
   }
 
-  if (req.method === 'POST' && url.pathname.startsWith('/api/printers/resume')) {
+  if (matchesRoute(req, url, 'POST', '/api/printers/resume')) {
     const ip = url.searchParams.get('ip');
     const state = getStateByIp(ip);
-    if (!state) { res.writeHead(404); res.end('Printer not found'); return; }
+    if (!state) { sendText(res, 404, 'Printer not found'); return; }
     
-    if (controlOperations.has(ip)) { res.writeHead(409, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Operation already in flight' })); return; }
-    if (!isPrinterPausedState(state.deviceState, state)) { res.writeHead(400); res.end('Printer is not paused'); return; }
+    if (controlOperations.has(ip)) { sendJson(res, 409, { error: 'Operation already in flight' }); return; }
+    if (!isPrinterPausedState(state.deviceState, state)) { sendText(res, 400, 'Printer is not paused'); return; }
 
-    controlOperations.set(ip, 'resuming');
-    controlWarnings.delete(ip);
-    
-    try {
-      await resumePrint(ip, state.printFileName);
-      res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ status: 'ok' }));
-    } catch (err) {
-      if (err.message === 'timeout') {
-        const warning = 'Resume was sent but the printer did not confirm it. Inspect the printer before trying again.';
-        controlWarnings.set(ip, warning);
-        res.writeHead(504, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: warning }));
-      } else {
-        res.writeHead(502, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'socket_error' }));
-      }
-    } finally {
-      controlOperations.delete(ip);
-    }
+    await runPrinterControl({
+      res,
+      ip,
+      operation: 'resume',
+      command: () => resumePrint(ip, state.printFileName)
+    });
     return;
   }
 
-  if (req.method === 'POST' && url.pathname.startsWith('/api/printers/cancel')) {
+  if (matchesRoute(req, url, 'POST', '/api/printers/cancel')) {
     const ip = url.searchParams.get('ip');
     const state = getStateByIp(ip);
-    if (!state) { res.writeHead(404); res.end('Printer not found'); return; }
+    if (!state) { sendText(res, 404, 'Printer not found'); return; }
     
-    if (controlOperations.has(ip)) { res.writeHead(409, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Operation already in flight' })); return; }
+    if (controlOperations.has(ip)) { sendJson(res, 409, { error: 'Operation already in flight' }); return; }
     if (!isPrinterPrintingState(state.deviceState, state) && !isPrinterPausedState(state.deviceState, state)) {
-      res.writeHead(400); res.end('Printer is not actively printing or paused'); return; 
+      sendText(res, 400, 'Printer is not actively printing or paused'); return;
     }
 
-    controlOperations.set(ip, 'canceling');
-    controlWarnings.delete(ip);
-    
-    try {
-      await cancelPrint(ip);
-      
-      activeDispatches.delete(ip);
-      manualOverrides.set(ip, 'needs_clearing');
-      if (state) state.farmState = 'needs_clearing';
-      
-      res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ status: 'ok' }));
-    } catch (err) {
-      if (err.message === 'timeout') {
-        const warning = 'Cancel was sent but the printer did not confirm it. Inspect the printer before trying again.';
-        controlWarnings.set(ip, warning);
-        res.writeHead(504, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: warning }));
-      } else {
-        res.writeHead(502, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'socket_error' }));
+    await runPrinterControl({
+      res,
+      ip,
+      operation: 'cancel',
+      command: () => cancelPrint(ip),
+      onConfirmed: () => {
+        activeDispatches.delete(ip);
+        manualOverrides.set(ip, 'needs_clearing');
+        state.farmState = 'needs_clearing';
       }
-    } finally {
-      controlOperations.delete(ip);
-    }
+    });
     return;
   }
   
-  if (req.method === 'POST' && url.pathname.startsWith('/api/upload')) {
+  if (matchesRoute(req, url, 'POST', '/api/upload')) {
     const filenameParam = url.searchParams.get('filename') || 'unknown.gcode';
     const filename = sanitizeFilename(filenameParam);
     const targetIp = url.searchParams.get('ip'); // Optional: bypass global queue
@@ -679,7 +587,6 @@ export const server = http.createServer(async (req, res) => {
 });
 
 // Dispatcher Loop: Matches queued jobs to free printers
-const dispatchingPrinters = new Set();
 const jobDispatcher = createJobDispatcher({
   uploadGcode,
   startPrint,
