@@ -2,8 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert';
 import { createServer } from 'node:http';
 import { createHash } from 'node:crypto';
-import { server as backendServer, stopDispatcher, reconcileDiscoveredPrinters, controlOperations, activeDispatches, failedJobs, controlWarnings, deriveActiveJobPhase, isPrinterPreparing } from '../bin/server.mjs';
+import { server as backendServer, stopDispatcher, reconcileDiscoveredPrinters, deriveActiveJobPhase, isPrinterPreparing } from '../bin/server.mjs';
 import { farmState, manualOverrides } from '../lib/farm.mjs';
+import { activeDispatches, controlOperations, controlWarnings, failedJobs } from '../lib/workflow-state.mjs';
 
 export function createMockWebSocketServer(port, handler) {
   return new Promise((resolve) => {
@@ -249,28 +250,4 @@ test('Control operations confirm correctly via backend endpoints', async (t) => 
     assert.strictEqual(deriveActiveJobPhase({ farmState: 'busy', printProgress: 50 }, 'printing', 'pausing'), 'pausing');
   });
 
-  await t.test('Legacy canceled records are removed from failedJobs on status request', async () => {
-    // Inject legacy records
-    failedJobs.push({ id: 'legacy-1', failureReason: 'canceled', filename: 'Legacy.gcode', filePath: 'scratch/Legacy.gcode' });
-    failedJobs.push({ id: 'legacy-2', failureReason: 'user_canceled', filename: 'Legacy2.gcode', filePath: 'scratch/Legacy2.gcode' });
-    failedJobs.push({ id: 'legacy-3', failureMessage: 'User canceled the print.', filename: 'Legacy3.gcode', filePath: 'scratch/Legacy3.gcode' });
-    
-    // Inject genuine failure
-    failedJobs.push({ id: 'genuine', failureReason: 'timeout', filename: 'RealFail.gcode', filePath: 'scratch/RealFail.gcode' });
-    
-    const fs = await import('node:fs');
-    fs.writeFileSync('scratch/Legacy.gcode', 'dummy');
-
-    const res = await request('/api/status', 'GET');
-    assert.strictEqual(res.status, 200);
-    
-    assert.strictEqual(failedJobs.length, 1);
-    assert.strictEqual(failedJobs[0].id, 'genuine');
-    
-    // Ensure file was not deleted
-    assert.strictEqual(fs.existsSync('scratch/Legacy.gcode'), true);
-    
-    fs.unlinkSync('scratch/Legacy.gcode');
-    failedJobs.length = 0;
-  });
 });

@@ -19,14 +19,6 @@ import {
   localAutoPrint
 } from '../lib/workflow-state.mjs';
 
-export {
-  activeDispatches,
-  controlOperations,
-  controlWarnings,
-  failedJobs,
-  localAutoPrint
-} from '../lib/workflow-state.mjs';
-
 const PUBLIC_DIR = path.join(process.cwd(), 'public');
 const SCRATCH_DIR = path.join(process.cwd(), 'scratch');
 if (!fs.existsSync(SCRATCH_DIR)) fs.mkdirSync(SCRATCH_DIR);
@@ -104,14 +96,6 @@ function reconcileActiveDispatches() {
 }
 
 function statusPayload() {
-  // Clean legacy canceled records
-  for (let i = failedJobs.length - 1; i >= 0; i--) {
-    const fj = failedJobs[i];
-    if (fj.failureReason === 'canceled' || fj.failureReason === 'user_canceled' || fj.failureMessage === 'User canceled the print.') {
-      failedJobs.splice(i, 1);
-    }
-  }
-
   reconcileActiveDispatches();
 
   const effectiveFarmState = {};
@@ -167,7 +151,6 @@ function statusPayload() {
     farmState: effectiveFarmState,
     jobQueue,
     settings,
-    manualOverrides: Object.fromEntries(manualOverrides),
     failedJobs,
     printerQueues: Object.fromEntries(printerQueues),
     localAutoPrint: Object.fromEntries(localAutoPrint),
@@ -204,11 +187,6 @@ export const server = http.createServer(async (req, res) => {
   
   if (matchesRoute(req, url, 'GET', '/api/status')) {
     sendJson(res, 200, statusPayload());
-    return;
-  }
-
-  if (matchesRoute(req, url, 'GET', '/api/active-printers')) {
-    sendJson(res, 200, getPrinters());
     return;
   }
 
@@ -301,10 +279,9 @@ export const server = http.createServer(async (req, res) => {
     // Remove from source array
     sourceArray.splice(idx, 1);
     
-    // Assign fresh id, preserve sourceJobId
+    // Assign a fresh id and reset transient failure metadata.
     const newJob = {
       ...job,
-      sourceJobId: job.id,
       id: `${Date.now()}_${randomUUID()}`,
       attempts: 0
     };

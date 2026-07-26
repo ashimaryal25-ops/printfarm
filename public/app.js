@@ -93,12 +93,10 @@ async function executeControl(ip, action, btn) {
   }
 }
 
-let currentSettings = { autoAssign: false };
-
 // Store card elements to update them efficiently
 const printerCards = {};
 
-async function requeueJob(jobId, btn, text) {
+async function requeueJob(jobId, btn) {
   if (btn) { btn.disabled = true; btn.textContent = '...'; }
   try {
     const res = await fetch(`/api/jobs/requeue?jobId=${encodeURIComponent(jobId)}`, { method: 'POST' });
@@ -108,7 +106,7 @@ async function requeueJob(jobId, btn, text) {
     fetchStatus();
   } catch (err) {
     alert(`Requeue error: ${err.message}`);
-    if (btn) { btn.disabled = false; btn.textContent = text; }
+    if (btn) { btn.disabled = false; btn.textContent = 'REQUEUE'; }
   }
 }
 
@@ -116,16 +114,16 @@ async function fetchStatus() {
   try {
     const res = await fetch('/api/status');
     const data = await res.json();
-    currentSettings = data.settings || currentSettings;
     renderActiveJobs(data.activeJobs || [], data.controlWarnings || {}, (ip, action, button) => executeControl(ip, action, button));
     
     // Sync toggle if changed externally
-    if (autoAssignCheck && autoAssignCheck.checked !== currentSettings.autoAssign) {
-      autoAssignCheck.checked = currentSettings.autoAssign;
+    const autoAssign = data.settings?.autoAssign ?? false;
+    if (autoAssignCheck && autoAssignCheck.checked !== autoAssign) {
+      autoAssignCheck.checked = autoAssign;
     }
 
     renderGlobalQueue(data.jobQueue || []);
-    renderFailedJobs(data.failedJobs || [], (jobId, button) => requeueJob(jobId, button, 'REQUEUE'));
+    renderFailedJobs(data.failedJobs || [], requeueJob);
 
     let sumTotal = 0, sumFree = 0, sumBusy = 0, sumClear = 0, sumError = 0, sumOffline = 0;
 
@@ -546,7 +544,6 @@ if (autoAssignCheck) {
     try {
       const res = await fetch(`/api/settings/auto-assign?value=${nextValue}`, { method: 'POST' });
       if (!res.ok) throw new Error(await res.text());
-      currentSettings.autoAssign = nextValue;
     } catch (err) {
       e.target.checked = !nextValue;
       console.error(err);

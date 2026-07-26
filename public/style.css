@@ -200,6 +200,7 @@ body {
 }
 
 .discovery-scan-btn {
+  flex: 1;
   width: 100%;
   min-height: 38px;
   padding: 8px 16px;
@@ -395,10 +396,6 @@ body {
 .subnet-input {
   display: none;
   flex: 2;
-}
-
-.discovery-scan-btn {
-  flex: 1;
 }
 
 .failed-jobs-container,

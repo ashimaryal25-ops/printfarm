@@ -6,15 +6,17 @@ import { setTimeout as delay } from 'node:timers/promises';
 process.env.HTTP_PORT = '9999';
 
 const {
-  activeDispatches,
-  controlOperations,
-  controlWarnings,
-  failedJobs,
-  localAutoPrint,
   server,
   startDispatcher,
   stopDispatcher
 } = await import('../bin/server.mjs');
+const {
+  activeDispatches,
+  controlOperations,
+  controlWarnings,
+  failedJobs,
+  localAutoPrint
+} = await import('../lib/workflow-state.mjs');
 const { startMockPrinter, stopMockPrinter } = await import('../bin/mock-printer.mjs');
 const {
   farmState,
