@@ -216,21 +216,41 @@ async function fetchStatus() {
         if (localUploadInput) {
           localUploadInput.addEventListener('change', async (e) => {
             const ip = card.dataset.ip;
-            const file = e.target.files[0];
-            if (!file) return;
+            const files = [...e.target.files];
+            if (files.length === 0) return;
+
+            const failures = [];
+            localUploadInput.disabled = true;
+
             try {
-              const res = await fetch(`/api/upload?filename=${encodeURIComponent(file.name)}&ip=${encodeURIComponent(ip)}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/octet-stream' },
-                body: file
-              });
-              if (!res.ok) throw new Error(await res.text());
-              showCardMessage(card, 'success', 'Uploaded successfully');
-            } catch (err) {
-              showCardMessage(card, 'error', `Local upload error: ${err.message}`);
+              for (let i = 0; i < files.length; i += 1) {
+                const file = files[i];
+                if (files.length > 1) {
+                  showCardMessage(card, 'success', `Uploading ${i + 1}/${files.length}...`);
+                }
+
+                try {
+                  const res = await fetch(`/api/upload?filename=${encodeURIComponent(file.name)}&ip=${encodeURIComponent(ip)}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/octet-stream' },
+                    body: file
+                  });
+                  if (!res.ok) throw new Error(await res.text());
+                } catch (err) {
+                  failures.push(`${file.name}: ${err.message}`);
+                }
+              }
             } finally {
+              localUploadInput.disabled = false;
               localUploadInput.value = ''; // clear input
               fetchStatus(); // trigger immediate refresh
+            }
+
+            const uploaded = files.length - failures.length;
+            if (failures.length === 0) {
+              showCardMessage(card, 'success', uploaded > 1 ? `Uploaded ${uploaded} files` : 'Uploaded successfully');
+            } else {
+              showCardMessage(card, 'error', `Failed ${failures.length}/${files.length}: ${failures[0]}`);
             }
           });
         }
