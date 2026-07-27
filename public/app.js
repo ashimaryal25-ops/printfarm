@@ -10,6 +10,14 @@ const autoAssignCheck = document.getElementById('autoAssignCheck');
 const rawDebugCheck = document.getElementById('rawDebugCheck');
 const globalFileInput = document.getElementById('globalFileInput');
 
+// The discovery checklist is authored HTML, but the subnet it reports back is
+// whatever the user typed. Escape that before it reaches innerHTML.
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+}
+
 function setDiscoveryMessage(type, title, body, { html = false } = {}) {
   const scanStatus = document.getElementById('scanStatus');
   const colorMap = {
@@ -693,8 +701,8 @@ if (discoveryModes && subnetInput && discoveryDesc && scanBtn && scanStatus) {
       
       if (data.found.length === 0) {
         const searched = data.subnet || (mode !== 'auto' ? val : 'the network');
-        setDiscoveryMessage('warning', 'No printers found', 
-          `PrinterFarm scanned ${searched} but did not find any reachable Creality printers.<br>
+        setDiscoveryMessage('warning', 'No printers found',
+          `PrinterFarm scanned ${escapeHtml(searched)} but did not find any reachable Creality printers.<br>
           <ul style="margin-left:16px; margin-top:4px;">
             <li>Make sure printers are connected to the same hotspot/router.</li>
             <li>Try opening the printer IP in your browser.</li>
@@ -702,6 +710,8 @@ if (discoveryModes && subnetInput && discoveryDesc && scanBtn && scanStatus) {
             <li>If using Windows hotspot, try 192.168.137.</li>
           </ul>`, { html: true });
       } else {
+        // A successful scan retires the hotspot shortcut a previous failure showed.
+        if (tryHotspotBtn) tryHotspotBtn.style.display = 'none';
         setDiscoveryMessage('success', '', `Found ${data.found.length} printers on ${data.subnet}. Updated farm.`);
         
         // Wipe local UI state so it rebuilds from the new farm list cleanly

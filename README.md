@@ -106,10 +106,17 @@ node bin/mock-printer.mjs
 
 ## Compatibility
 
+PrinterFarm targets a protocol rather than a model list. Any stock Creality printer exposing the LAN WebSocket on port 9999 plus HTTP upload is a candidate, and discovery tries it automatically.
+
 | Model | Status |
 |---|---|
-| Ender 3 V3 KE | Tested on physical hardware |
-| K1, K1 Max, K2 Plus, CR-10 SE | Unverified; reports welcome |
+| Ender 3 V3 KE | Verified on physical hardware |
+| K1, K1 Max, K1C | Experimental — same protocol family, unverified |
+| CR-10 SE | Experimental — protocol unconfirmed |
+| K2, K2 Plus | Not supported — different transfer interface |
+| CR-M4 | Not supported — legacy CXSWBox networking |
+
+Experimental means discovery and job start are expected to work, while details such as pause confirmation or telemetry field names may differ by firmware. Reports from those models are welcome and are how rows get promoted.
 
 Firmware updates may change the unofficial LAN protocol. Include the printer model, firmware version, and relevant server logs in bug reports.
 
