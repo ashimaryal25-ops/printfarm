@@ -182,9 +182,9 @@ async function runPrinterControl({ res, ip, operation, command, onConfirmed }) {
   }
 }
 
-export const server = http.createServer(async (req, res) => {
+export async function requestHandler(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
-  
+
   if (matchesRoute(req, url, 'GET', '/api/status')) {
     sendJson(res, 200, statusPayload());
     return;
@@ -561,7 +561,9 @@ export const server = http.createServer(async (req, res) => {
     res.writeHead(404);
     res.end('Not found');
   }
-});
+}
+
+export const server = http.createServer(requestHandler);
 
 // Dispatcher Loop: Matches queued jobs to free printers
 const jobDispatcher = createJobDispatcher({
@@ -619,14 +621,41 @@ export function stopDispatcher() {
 import { pathToFileURL } from 'node:url';
 
 const PORT = process.env.PORT || 3000;
-const HOST = process.env.HOST || '127.0.0.1';
+// Bind every loopback address, not just one. On Windows `localhost` resolves to
+// ::1 before 127.0.0.1, so an IPv4-only bind leaves the browser knocking on a
+// closed IPv6 port and loading only when it happens to fall back.
+const HOSTS = process.env.HOST ? [process.env.HOST] : ['127.0.0.1', '::1'];
+
+function listenOn(host, onReady) {
+  const instance = host === HOSTS[0] ? server : http.createServer(requestHandler);
+
+  instance.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`Port ${PORT} is already in use — PrinterFarm may still be running from an earlier start.`);
+      console.error(`Stop it, or pick another port with: PORT=3100 npm start`);
+      process.exit(1);
+    }
+    // A missing IPv6 stack is not fatal; the IPv4 bind still serves the dashboard.
+    if (host === '::1' && (err.code === 'EAFNOSUPPORT' || err.code === 'EADDRNOTAVAIL')) return;
+    throw err;
+  });
+
+  instance.listen(PORT, host, onReady);
+  return instance;
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   // Start polling the farm
   startFarmPolling(printers, 2000);
   startDispatcher();
-  
-  server.listen(PORT, HOST, () => {
-    console.log(`PrinterFarm Dashboard running at http://${HOST}:${PORT}`);
-  });
+
+  let announced = false;
+  for (const host of HOSTS) {
+    listenOn(host, () => {
+      if (announced) return;
+      announced = true;
+      console.log(`PrinterFarm Dashboard running at http://localhost:${PORT}`);
+    });
+  }
 }
 
