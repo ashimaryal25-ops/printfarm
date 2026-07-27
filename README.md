@@ -55,6 +55,8 @@ Then open `http://<computer-ip>:3000` on the phone. Windows Firewall may ask for
 
 ## Network discovery
 
+![Four printers connected to a Windows laptop hotspot, then discovered by PrinterFarm and added to the farm](docs/discovery.gif)
+
 Discovery scans one RFC1918 private `/24` network at a time.
 
 - **Auto** selects a detected private adapter and prefers the Windows hotspot subnet `192.168.137.0/24`.
