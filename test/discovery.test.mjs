@@ -80,6 +80,36 @@ test('scanSubnet() - returns judged online printers from probe results', async (
   assert.equal(result.found[0].farmState, 'busy');
 });
 
+test('scanSubnet() - retries a printer that misses the first discovery probe', async () => {
+  let calls = 0;
+  const result = await scanSubnet('192.168.137', {
+    start: 28,
+    end: 28,
+    timeoutMs: 10,
+    concurrency: 1,
+    attempts: 2,
+    probeFn: async (printer) => {
+      calls += 1;
+      if (calls === 1) {
+        return { ...printer, status: 'unreachable', job: 'timeout' };
+      }
+      return {
+        ...printer,
+        status: 'online',
+        job: {
+          deviceState: 0,
+          hostname: 'Ender3V3KE-9E9F',
+          printFileName: ''
+        }
+      };
+    }
+  });
+
+  assert.equal(calls, 2);
+  assert.equal(result.found.length, 1);
+  assert.equal(result.found[0].ip, '192.168.137.28');
+});
+
 test('normalizeSubnetInput() - normalizes full IPs and subnets', () => {
   assert.strictEqual(normalizeSubnetInput('192.168.1'), '192.168.1');
   assert.strictEqual(normalizeSubnetInput('192.168.1.1'), '192.168.1');

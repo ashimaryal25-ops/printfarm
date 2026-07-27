@@ -1,5 +1,7 @@
 # PrinterFarm
 
+![PrinterFarm dispatching four queued jobs to a farm of stock Ender 3 V3 KE printers, ending with the printer's own screen showing the uploaded file](docs/demo.gif)
+
 PrinterFarm is a local dashboard for discovering, monitoring, and routing G-code jobs across stock networked Creality printers.
 
 It uses the printers' existing LAN interfaces. No root access, custom firmware, per-printer Raspberry Pi, Moonraker, or cloud account is required.
@@ -52,6 +54,8 @@ npm start
 Then open `http://<computer-ip>:3000` on the phone. Windows Firewall may ask for permission; allow private networks only. Never expose PrinterFarm directly to the public internet.
 
 ## Network discovery
+
+![Four printers connected to a Windows laptop hotspot, then discovered by PrinterFarm and added to the farm](docs/discovery.gif)
 
 Discovery scans one RFC1918 private `/24` network at a time.
 
