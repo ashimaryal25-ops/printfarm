@@ -53,8 +53,17 @@
             <button id="scanBtn" class="action-btn assign-btn discovery-scan-btn">DISCOVER</button>
           </div>
           <div id="scanStatus" class="discovery-status"></div>
+
+          <div class="auto-assign-toggle raw-debug-toggle">
+            <label class="toggle-switch">
+              <input type="checkbox" id="rawDebugCheck">
+              <span class="slider"></span>
+            </label>
+            <span class="toggle-label">Raw telemetry</span>
+            <span class="tooltip" title="Replace each card with the exact telemetry PrinterFarm parsed from that printer. Useful when reporting an unsupported model.">?</span>
+          </div>
         </div>
-        
+
         <div class="queue-list-container">
           <div class="queue-header">
             <h3>Queue (<span id="queueCount">0</span>)</h3>

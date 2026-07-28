@@ -641,6 +641,15 @@ if (discoveryModes && subnetInput && discoveryDesc && scanBtn && scanStatus) {
     });
   }
 
+  // The panel starts in Auto mode, where neither the subnet box nor the hotspot
+  // shortcut applies. Both are markup-visible by default and were only ever
+  // hidden by a change event, which does not fire on first load.
+  const initialMode = document.querySelector('input[name="discoveryMode"]:checked');
+  if (!initialMode || initialMode.value === 'auto') {
+    subnetInput.style.display = 'none';
+  }
+  if (tryHotspotBtn) tryHotspotBtn.style.display = 'none';
+
   discoveryModes.forEach(radio => {
     radio.addEventListener('change', (e) => {
       const mode = e.target.value;

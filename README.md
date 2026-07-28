@@ -120,6 +120,10 @@ Experimental means discovery and job start are expected to work, while details s
 
 Firmware updates may change the unofficial LAN protocol. Include the printer model, firmware version, and relevant server logs in bug reports.
 
+### Making an unlisted printer work
+
+The vendor-specific logic is confined to four files, and the most common difference — a renamed telemetry field — is a one-line change. [CONTRIBUTING.md](CONTRIBUTING.md) documents where those seams are, how to capture what your printer actually sends (the dashboard has a raw telemetry view for exactly this), and how to verify a change against the simulator without hardware.
+
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the system design and [ROADMAP.md](ROADMAP.md) for deferred features.
 
 ## Security
