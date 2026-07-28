@@ -12,7 +12,7 @@ If it works, open an issue saying so with your model and firmware version. That 
 
 Two ways to see the raw protocol, in order of convenience:
 
-1. **The dashboard's raw view.** Tick **Raw Debug** in the sidebar. Each card is replaced by the exact telemetry object PrinterFarm parsed from that printer. Copy it into your issue.
+1. **The dashboard's raw view.** Turn on the **Raw telemetry** switch in the sidebar, under the Discover button. Every printer card is replaced by the exact data PrinterFarm read from that printer, as JSON. Copy it into your issue.
 2. **The printer's own web UI.** Open `http://<printer-ip>` in Chrome, press F12, and watch the Network tab — filter to WS and click the `9999` connection to read the live message frames. This is how the protocol was worked out in the first place, and it is the authoritative source for a model we have never seen.
 
 Include the model, the firmware version, and the raw frames. A single pasted telemetry payload is often enough to add support.
