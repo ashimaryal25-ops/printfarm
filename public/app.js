@@ -26,7 +26,7 @@ function formatRawTelemetry(messages) {
     return 'No telemetry received from this printer.';
   }
   return messages
-    .map((msg, i) => `// frame ${i + 1} of ${messages.length}\n${JSON.stringify(msg, null, 2)}`)
+    .map((msg, i) => `// message ${i + 1} of ${messages.length}\n${JSON.stringify(msg, null, 2)}`)
     .join('\n\n');
 }
 
