@@ -25,7 +25,12 @@ About five minutes, once.
 There's no `npm install` step — PrinterFarm has zero dependencies, so it just runs. Keep
 the terminal window open; closing it stops PrinterFarm.
 
-Prefer git? `git clone https://github.com/ashimaryal25-ops/printfarm.git`, then step 4.
+Prefer git? Clone it instead of steps 2 and 3, then carry on from step 4:
+
+```bash
+git clone https://github.com/ashimaryal25-ops/printfarm.git
+cd printfarm
+```
 
 ## What you can do with it
 
