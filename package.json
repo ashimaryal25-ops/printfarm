@@ -1,6 +1,9 @@
 {
-  "name": "printerfarm",
-  "repository": "https://github.com/ashimaryal25-ops/printfarm",
+  "name": "printfarm",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ashimaryal25-ops/printfarm.git"
+  },
   "version": "1.1.0",
   "private": true,
   "type": "module",
@@ -9,7 +12,7 @@
   "scripts": {
     "start": "node bin/server.mjs",
     "status": "node bin/farm-status.mjs",
-    "check": "node --check bin/server.mjs && node --check bin/mock-printer.mjs && node --check lib/creality.mjs && node --check lib/discovery.mjs && node --check lib/dispatcher.mjs && node --check lib/farm.mjs && node --check lib/http-helpers.mjs && node --check lib/printer-identity.mjs && node --check lib/probe.mjs && node --check lib/workflow-state.mjs && node --check public/app.js && node --check public/dashboard-renderers.js",
+    "check": "node --check bin/farm-status.mjs && node --check bin/mock-printer.mjs && node --check bin/server.mjs && node --check lib/creality.mjs && node --check lib/discovery.mjs && node --check lib/dispatcher.mjs && node --check lib/farm.mjs && node --check lib/http-helpers.mjs && node --check lib/printer-identity.mjs && node --check lib/printer-state.mjs && node --check lib/probe.mjs && node --check lib/server-helpers.mjs && node --check lib/workflow-state.mjs && node --check public/app.js && node --check public/dashboard-renderers.js",
     "test": "node --test test/**/*.test.mjs",
     "test:integration": "node test/integration.mjs",
     "verify": "npm run check && npm test && npm run test:integration"
