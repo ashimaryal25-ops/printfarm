@@ -10,12 +10,17 @@ If it works, open an issue saying so with your model and firmware version. That 
 
 ## Capturing what your printer actually says
 
-Two ways to see the raw protocol, in order of convenience:
+Which method you need depends on whether PrinterFarm can talk to the printer at all.
 
-1. **The dashboard's raw view.** Turn on the **Raw telemetry** switch in the sidebar, under the Discover button. Every printer card is replaced by the exact data PrinterFarm read from that printer, as JSON. Copy it into your issue.
-2. **The printer's own web UI.** Open `http://<printer-ip>` in Chrome, press F12, and watch the Network tab — filter to WS and click the `9999` connection to read the live message frames. This is how the protocol was worked out in the first place, and it is the authoritative source for a model we have never seen.
+**If Discover found your printer**, use the dashboard's raw view. Turn on the **Raw telemetry** switch in the sidebar, under the Discover button, and every printer card is replaced by the exact data PrinterFarm read from that printer, as JSON. Paste that into your issue. For the common case — a field under a different name — that alone is usually enough.
 
-Include the model, the firmware version, and the raw frames. A single pasted telemetry payload is often enough to add support.
+**If Discover found nothing**, the raw view has nothing to show you, because PrinterFarm never connected in the first place. Go to the printer's own web interface instead: open `http://<printer-ip>` in Chrome and press F12. Leave the Network tab recording and start a print from that page.
+
+Don't filter the Network tab. On the Ender 3 V3 KE the traffic you want is a WebSocket on port 9999, but that is exactly the assumption being tested — if your printer never opens one, *that is the finding*, and the port it uses instead is the single most useful thing you can report.
+
+If the printer has no web interface at all, capturing Creality Print with Wireshark while it uploads and starts a print is the fallback.
+
+Either way, include the model, the firmware version, and whatever you captured.
 
 ## Where the protocol assumptions live
 
