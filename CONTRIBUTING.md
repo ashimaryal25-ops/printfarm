@@ -12,7 +12,7 @@ If it works, open an issue saying so with your model and firmware version. That 
 
 Which method you need depends on whether PrinterFarm can talk to the printer at all.
 
-**If Discover found your printer**, use the dashboard's raw view. Turn on the **Raw telemetry** switch in the sidebar, under the Discover button, and every printer card is replaced by the exact data PrinterFarm read from that printer, as JSON. Paste that into your issue. For the common case — a field under a different name — that alone is usually enough.
+**If Discover found your printer**, use the dashboard's raw view. Turn on the **Raw telemetry** switch in the sidebar, under the Discover button, and every printer card is replaced by the WebSocket frames that printer sent, exactly as they arrived and before this adapter interprets them. That matters: field names PrinterFarm does not recognize yet still show up there, which is the whole point. Paste them into your issue. For the common case — a field under a different name — that alone is usually enough.
 
 **If Discover found nothing**, the raw view has nothing to show you, because PrinterFarm never connected in the first place. Go to the printer's own web interface instead: open `http://<printer-ip>` in Chrome and press F12. Leave the Network tab recording and start a print from that page.
 

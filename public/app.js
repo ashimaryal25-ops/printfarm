@@ -18,6 +18,18 @@ function escapeHtml(value) {
   }[ch]));
 }
 
+// Every WebSocket frame the printer sent, unmodified. This is what a contributor
+// needs in order to spot a field name this adapter does not recognize yet, so it
+// deliberately shows the frames rather than the parsed telemetry.
+function formatRawTelemetry(messages) {
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return 'No telemetry received from this printer.';
+  }
+  return messages
+    .map((msg, i) => `// frame ${i + 1} of ${messages.length}\n${JSON.stringify(msg, null, 2)}`)
+    .join('\n\n');
+}
+
 function setDiscoveryMessage(type, title, body, { html = false } = {}) {
   const scanStatus = document.getElementById('scanStatus');
   const colorMap = {
@@ -315,7 +327,7 @@ async function fetchStatus() {
         if (statsEl) statsEl.style.display = 'none';
         
         rawDebugView.style.display = 'block';
-        rawDebugView.textContent = JSON.stringify(state, null, 2);
+        rawDebugView.textContent = formatRawTelemetry(state.rawMessages);
         
         // Reset classes
         badge.className = 'status-badge';
