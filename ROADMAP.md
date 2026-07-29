@@ -1,9 +1,5 @@
 # Roadmap
 
-## Automatic part ejection
-
-Add opt-in, printer-specific ejection profiles only after physical validation of cooling thresholds, toolhead clearance, motion limits, and failure recovery. Ejection must never be added blindly to arbitrary user G-code.
-
 ## Persistent job history
 
 Add a collapsed history view after the live workflow is stable in broader use. A job must only be recorded as completed after terminal-success telemetry; confirming that a print started is not completion. The history should distinguish completed, canceled, aborted, and failed outcomes, cap retention, and offer **Add to Queue** only while the original local G-code still exists.

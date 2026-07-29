@@ -46,9 +46,8 @@ Once your printers show up, everything happens from the one page:
 - **Stop it printing onto a finished part.** A printer that just finished stays locked
   until you confirm you've cleared the bed.
 
-Two things worth knowing up front: your queue lives in memory, so restarting PrinterFarm
-clears it (your printer list is saved and comes back). And there's no automatic part
-ejection — a human still clears the bed.
+One thing worth knowing up front: your queue lives in memory, so restarting PrinterFarm
+clears it. Your printer list is saved and comes back.
 
 ## Finding your printers
 
@@ -145,7 +144,7 @@ to test a change against the simulator.
 |---|---|---|
 | `HOST` | `127.0.0.1` | Address the dashboard listens on |
 | `PORT` | `3000` | Dashboard port |
-| `HTTP_PORT` | `80` | Port used to upload to printers |
+| `HTTP_PORT` | `80` | Port used to upload to printers. The bundled simulator answers on `9999`, which is used automatically for `127.0.0.1`. |
 | `GCODE_DIR` | `/usr/data/printer_data/gcodes` | Where files land on the printer |
 
 Uploads are capped at 100 MB and kept in `scratch/`.
