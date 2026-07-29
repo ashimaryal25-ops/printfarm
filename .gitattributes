@@ -1,0 +1,8 @@
+# Keep demo recordings out of release archives. They are several megabytes each
+# and are only meant to be viewed on the repository page.
+docs/ export-ignore
+.github/ export-ignore
+.gitattributes export-ignore
+.gitignore export-ignore
+
+*.gif binary
