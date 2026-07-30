@@ -60,7 +60,8 @@
               <span class="slider"></span>
             </label>
             <span class="toggle-label">Raw telemetry</span>
-            <span class="tooltip" title="Show the raw data each printer sent, before PrinterFarm reads it. Paste this into an issue if your printer is not supported yet.">?</span>
+            <button type="button" class="tooltip" aria-label="What is raw telemetry?"
+              data-tip="Shows the exact data your printer sends. Copy it into a bug report if your printer isn't working.">?</button>
           </div>
         </div>
 
@@ -73,7 +74,8 @@
                 <span class="slider"></span>
               </label>
               <span class="toggle-label">Auto-Print</span>
-              <span class="tooltip" title="When checked, jobs automatically go to the next free printer. Uncheck to manually assign jobs.">?</span>
+              <button type="button" class="tooltip" aria-label="What is Auto-Print?"
+                data-tip="Jobs start automatically on the next free printer. Turn it off to pick the printer yourself.">?</button>
             </div>
           </div>
           <ul id="queueList" class="queue-list">

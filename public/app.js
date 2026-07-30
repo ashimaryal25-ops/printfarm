@@ -755,6 +755,36 @@ if (discoveryModes && subnetInput && discoveryDesc && scanBtn && scanStatus) {
   });
 }
 
+// Help markers open on click as well as hover, since a phone has no hover.
+document.addEventListener('click', (event) => {
+  const marker = event.target.closest('.tooltip');
+  document.querySelectorAll('.tooltip.open').forEach((open) => {
+    if (open !== marker) open.classList.remove('open');
+  });
+  if (!marker) return;
+  event.preventDefault();
+  marker.classList.toggle('open');
+  if (!marker.classList.contains('open')) return;
+
+  // The bubble sits centred above the marker by default, which puts it off
+  // screen when the marker is near an edge. Anchor it to whichever side fits,
+  // and drop it below the marker when there is no room above.
+  const bubble = getComputedStyle(marker, '::after');
+  const bubbleWidth = parseFloat(bubble.width) || 240;
+  const bubbleHeight = parseFloat(bubble.height) || 0;
+  const box = marker.getBoundingClientRect();
+  const centre = box.left + box.width / 2;
+
+  marker.classList.toggle('align-left', centre - bubbleWidth / 2 < 8);
+  marker.classList.toggle('align-right', centre + bubbleWidth / 2 > window.innerWidth - 8);
+  marker.classList.toggle('flip-down', box.top - bubbleHeight - 6 < 8);
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  document.querySelectorAll('.tooltip.open').forEach((open) => open.classList.remove('open'));
+});
+
 // Poll every 2 seconds
 setInterval(fetchStatus, 2000);
 fetchStatus();
