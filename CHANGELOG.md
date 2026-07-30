@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 1.1.1 - 2026-07-30
+
+### Fixed
+
+- The raw telemetry view now shows the messages a printer actually sent. It previously showed the parsed result, which keeps only the fields this adapter already recognizes — so a printer using different field names appeared to send nothing useful, which is the one case the view exists for.
+- The raw telemetry view keeps updating for a printer whose telemetry cannot be read. Its safety state is deliberately frozen, and the raw messages were being frozen along with it, so starting a print on the printer itself never showed anything new. Watching those messages change is how support for a new model gets written.
+- The help markers next to Raw telemetry and Auto-Print open on click, so they work on a phone, and no longer rely on a browser tooltip that never appeared there. They also stay on screen near a window edge.
+- Release archives no longer carry the demo recordings, which made the download 11 MB for a 289 KB program.
+
+### Changed
+
+- The first-run panel and the dashboard header no longer explain themselves in field names and shell commands.
+- The syntax check covers every source file. `printer-state.mjs` and `server-helpers.mjs` were both missing, and contributors are pointed at the first of those.
+- CI runs on Node 24 as well as 22. Node 24 is the current LTS, so it is what the install instructions actually get people.
+- The package name matches the repository.
+
 ## 1.1.0 - 2026-07-28
 
 ### Added
