@@ -1,6 +1,6 @@
 # Architecture
 
-PrinterFarm is a zero-runtime-dependency Node.js application with four boundaries.
+PrintFarm is a zero-runtime-dependency Node.js application with four boundaries.
 
 ## Dashboard
 

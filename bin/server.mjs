@@ -640,7 +640,7 @@ function listenOn(host, onReady) {
 
   instance.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
-      console.error(`Port ${PORT} is already in use — PrinterFarm may still be running from an earlier start.`);
+      console.error(`Port ${PORT} is already in use — PrintFarm may still be running from an earlier start.`);
       console.error(`Stop it, or pick another port with: PORT=3100 npm start`);
       process.exit(1);
     }
@@ -663,7 +663,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     listenOn(host, () => {
       if (announced) return;
       announced = true;
-      console.log(`PrinterFarm Dashboard running at http://localhost:${PORT}`);
+      console.log(`PrintFarm Dashboard running at http://localhost:${PORT}`);
     });
   }
 }

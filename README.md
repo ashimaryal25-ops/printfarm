@@ -1,9 +1,9 @@
-# PrinterFarm
+# PrintFarm
 
-![PrinterFarm dispatching four queued jobs to a farm of stock Ender 3 V3 KE printers, ending with the printer's own screen showing the uploaded file](docs/demo.gif)
+![PrintFarm dispatching four queued jobs to a farm of stock Ender 3 V3 KE printers, ending with the printer's own screen showing the uploaded file](docs/demo.gif)
 
 Running more than one Creality printer usually means walking between them with an SD
-card, or bolting a Raspberry Pi to each one. PrinterFarm is a third option: a dashboard
+card, or bolting a Raspberry Pi to each one. PrintFarm is a third option: a dashboard
 that runs on your computer and talks to the printers over your network, using the LAN
 interface they already have.
 
@@ -17,13 +17,13 @@ About five minutes, once.
 | | Step |
 |---|---|
 | 1 | Install [Node.js LTS](https://nodejs.org) — leave *"Tools for Native Modules"* unchecked |
-| 2 | Download [printfarm-v1.1.0.zip](https://github.com/ashimaryal25-ops/printfarm/releases/latest) and extract it |
+| 2 | Download the zip from the [latest release](https://github.com/ashimaryal25-ops/printfarm/releases/latest) and extract it |
 | 3 | Open a terminal in that folder — Shift + right-click → *Open in Terminal* |
 | 4 | Run `npm start` |
 | 5 | Open **http://127.0.0.1:3000** and click **DISCOVER** |
 
-There's no `npm install` step — PrinterFarm has zero dependencies, so it just runs. Keep
-the terminal window open; closing it stops PrinterFarm.
+There's no `npm install` step — PrintFarm has zero dependencies, so it just runs. Keep
+the terminal window open; closing it stops PrintFarm.
 
 Prefer git? Clone it instead of steps 2 and 3, then carry on from step 4:
 
@@ -46,14 +46,14 @@ Once your printers show up, everything happens from the one page:
 - **Stop it printing onto a finished part.** A printer that just finished stays locked
   until you confirm you've cleared the bed.
 
-One thing worth knowing up front: your queue lives in memory, so restarting PrinterFarm
+One thing worth knowing up front: your queue lives in memory, so restarting PrintFarm
 clears it. Your printer list is saved and comes back.
 
 ## Finding your printers
 
-![Four printers connected to a Windows laptop hotspot, then discovered by PrinterFarm and added to the farm](docs/discovery.gif)
+![Four printers connected to a Windows laptop hotspot, then discovered by PrintFarm and added to the farm](docs/discovery.gif)
 
-Click **DISCOVER** and PrinterFarm scans one private network at a time looking for
+Click **DISCOVER** and PrintFarm scans one private network at a time looking for
 printers that answer.
 
 - **Auto** picks a private network it can see, preferring the Windows hotspot range.
@@ -62,7 +62,7 @@ printers that answer.
 - **Hotspot** uses the Windows hotspot range, `192.168.137.0/24`.
 
 If discovery finds nothing on campus or office Wi-Fi, that's usually the network, not
-PrinterFarm — most of them block devices from talking to each other. A laptop hotspot,
+PrintFarm — most of them block devices from talking to each other. A laptop hotspot,
 phone hotspot, or cheap travel router gets around it, which is what the clip above shows.
 
 Whatever it finds is written to `printers.json` next to the app, so your printers are
@@ -80,7 +80,7 @@ npm start
 ```
 
 Then open `http://<your-computer-ip>:3000` on the phone. Windows will ask about the
-firewall — allow private networks only, and never put PrinterFarm on the public internet.
+firewall — allow private networks only, and never put PrintFarm on the public internet.
 
 ## How Auto-Print decides
 
@@ -88,7 +88,7 @@ Auto-Print comes in two flavours that stay out of each other's way. A printer wi
 own Auto-Print on only takes jobs from its own queue, and the shared queue skips it.
 Everything else pulls from the shared queue.
 
-Before anything starts, PrinterFarm checks that the printer really is free and that no
+Before anything starts, PrintFarm checks that the printer really is free and that no
 upload or command is already in flight. When a job ends — finished, cancelled, or
 failed — that printer goes to `NEEDS CLEARING` and won't accept another job until you
 clear the bed and say so in the dashboard.
@@ -102,7 +102,7 @@ Auto-Print, pause, resume, cancel, bed clearing — without owning any hardware.
 # terminal A: a fake Creality printer on localhost
 node bin/mock-printer.mjs
 
-# terminal B: point PrinterFarm at it
+# terminal B: point PrintFarm at it
 echo '[{ "id": "1", "ip": "127.0.0.1" }]' > printers.json
 npm start
 ```
@@ -112,7 +112,7 @@ reports progress, and finishes like the real thing.
 
 ## Which printers work
 
-PrinterFarm goes after a protocol rather than a model list: any stock Creality printer
+PrintFarm goes after a protocol rather than a model list: any stock Creality printer
 that exposes the LAN WebSocket on port 9999 plus HTTP upload is a candidate, and
 discovery tries it automatically.
 
@@ -172,5 +172,5 @@ pause → resume → cancel cycle against the simulator, so none of it needs har
 
 ## License
 
-MIT. PrinterFarm is an unofficial community project, not affiliated with or endorsed by
+MIT. PrintFarm is an unofficial community project, not affiliated with or endorsed by
 Creality.

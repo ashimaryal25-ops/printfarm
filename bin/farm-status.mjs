@@ -1,4 +1,4 @@
-// PrinterFarm CLI — check status across your printer farm.
+// PrintFarm CLI — check status across your printer farm.
 //
 // Usage:
 //   node bin/farm-status.mjs
@@ -20,7 +20,7 @@ startFarmPolling(printers);
 // Render the UI every 5 seconds using the global memory state
 setInterval(() => {
   console.clear();
-  console.log("PrinterFarm Live Status (Updates every 5s)");
+  console.log("PrintFarm Live Status (Updates every 5s)");
   console.log("--------------------------------------------");
   console.log("id    ip                status      job");
   console.log("----  ----------------  ----------  -------------------------");

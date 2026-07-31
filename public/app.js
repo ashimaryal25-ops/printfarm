@@ -714,7 +714,7 @@ if (discoveryModes && subnetInput && discoveryDesc && scanBtn && scanStatus) {
       
       if (!res.ok) {
         if (data.error && data.error.includes('Not a private network')) {
-           setDiscoveryMessage('error', 'Public/campus network blocked', 'PrinterFarm only scans private LANs like 192.168.x.x, 10.x.x.x, or 172.16-31.x.x.');
+           setDiscoveryMessage('error', 'Public/campus network blocked', 'PrintFarm only scans private LANs like 192.168.x.x, 10.x.x.x, or 172.16-31.x.x.');
            return;
         }
         throw new Error(data.error || 'Scan failed');
@@ -723,7 +723,7 @@ if (discoveryModes && subnetInput && discoveryDesc && scanBtn && scanStatus) {
       if (data.found.length === 0) {
         const searched = data.subnet || (mode !== 'auto' ? val : 'the network');
         setDiscoveryMessage('warning', 'No printers found',
-          `PrinterFarm scanned ${escapeHtml(searched)} but did not find any reachable Creality printers.<br>
+          `PrintFarm scanned ${escapeHtml(searched)} but did not find any reachable Creality printers.<br>
           <ul style="margin-left:16px; margin-top:4px;">
             <li>Make sure printers are connected to the same hotspot/router.</li>
             <li>Try opening the printer IP in your browser.</li>
